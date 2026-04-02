@@ -55,11 +55,28 @@ cover/
 *.mo
 *.pot
 
+# Claude
+CLAUDE.md
 # Django stuff:
 *.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+backend/media/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Backend secrets
+backend/.env
+
+# Virtual environment
+backend/venv/
+
+# macOS
+.DS_Store
 
 # Flask stuff:
 instance/
