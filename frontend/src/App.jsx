@@ -7,6 +7,8 @@ import RegisterPage from "./pages/RegisterPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import UploadPage from "./pages/UploadPage.jsx";
 import BillDetailPage from "./pages/BillDetailPage.jsx";
+import DisputePage from "./pages/DisputePage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx";
 
 /**
  * Redirects unauthenticated users to /login.
@@ -112,6 +114,23 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <BillDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bills/:id/disputes/:disputeId"
+        element={
+          <ProtectedRoute>
+            <DisputePage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         }
       />

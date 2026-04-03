@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
 import {
   getBillDetail,
+  getBillDisputes,
   getChatHistory,
   sendChatMessage,
   createDispute,
@@ -10,6 +12,14 @@ import {
 import Navbar from "../components/Navbar.jsx";
 import LineItemCard from "../components/LineItemCard.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
+
+const DISPUTE_STATUS_STYLES = {
+  draft: "bg-gray-100 text-gray-600",
+  sent: "bg-blue-100 text-blue-700",
+  acknowledged: "bg-purple-100 text-purple-700",
+  resolved: "bg-green-100 text-green-700",
+  denied: "bg-red-100 text-red-700",
+};
 
 /**
  * Bill detail page showing provider info, line items with risk levels,
@@ -20,6 +30,7 @@ export default function BillDetailPage() {
   const navigate = useNavigate();
 
   const [bill, setBill] = useState(null);
+  const [disputes, setDisputes] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -28,17 +39,23 @@ export default function BillDetailPage() {
   const [error, setError] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
 
+  // Dispute selection mode
+  const [disputeMode, setDisputeMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
   const chatBottomRef = useRef(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const [billData, historyData] = await Promise.all([
+        const [billData, historyData, disputesData] = await Promise.all([
           getBillDetail(id),
           getChatHistory(id),
+          getBillDisputes(id),
         ]);
         setBill(billData);
         setChatMessages(historyData);
+        setDisputes(disputesData);
       } catch {
         setError("Failed to load bill details.");
       } finally {
@@ -52,12 +69,45 @@ export default function BillDetailPage() {
     chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
+  function enterDisputeMode() {
+    // Pre-select all red items
+    const redIds = new Set(
+      (bill?.line_items || []).filter((i) => i.risk_level === "red").map((i) => i.id)
+    );
+    setSelectedIds(redIds);
+    setDisputeMode(true);
+  }
+
+  function toggleItemSelection(itemId) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }
+
+  async function handleSubmitDispute() {
+    if (selectedIds.size === 0) return;
+    setIsDisputing(true);
+    try {
+      const dispute = await createDispute(id, [...selectedIds]);
+      setDisputes((prev) => [dispute, ...prev]);
+      setDisputeMode(false);
+      setSelectedIds(new Set());
+      navigate(`/bills/${id}/disputes/${dispute.id}`);
+    } catch {
+      setError("Failed to generate dispute letter. Please try again.");
+    } finally {
+      setIsDisputing(false);
+    }
+  }
+
   async function handleSendMessage(e) {
     e.preventDefault();
     const message = chatInput.trim();
     if (!message) return;
 
-    // Optimistically show the user message
     setChatMessages((prev) => [
       ...prev,
       { id: Date.now(), role: "user", content: message, created_at: new Date().toISOString() },
@@ -95,20 +145,6 @@ export default function BillDetailPage() {
     }
   }
 
-  async function handleDispute() {
-    setIsDisputing(true);
-    try {
-      const dispute = await createDispute(id);
-      navigate(`/bills/${id}?dispute=${dispute.id}`);
-      setError("");
-      alert(`Dispute letter created successfully! Dispute ID: ${dispute.id}`);
-    } catch {
-      setError("Failed to generate dispute letter. Please try again.");
-    } finally {
-      setIsDisputing(false);
-    }
-  }
-
   if (pageLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -131,8 +167,10 @@ export default function BillDetailPage() {
     );
   }
 
-  const redItems = bill?.line_items?.filter((i) => i.risk_level === "red") || [];
-  const hasIssues = redItems.length > 0;
+  const flaggedItems = (bill?.line_items || []).filter(
+    (i) => i.risk_level === "red" || i.risk_level === "yellow"
+  );
+  const hasIssues = flaggedItems.length > 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -177,33 +215,75 @@ export default function BillDetailPage() {
           <div className="flex gap-3 mt-6">
             <button
               onClick={handleReanalyze}
-              disabled={isAnalyzing}
+              disabled={isAnalyzing || disputeMode}
               className="text-sm text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
             >
               {isAnalyzing ? "Re-analyzing..." : "Re-analyze"}
             </button>
-            {hasIssues && (
+            {hasIssues && !disputeMode && (
               <button
-                onClick={handleDispute}
-                disabled={isDisputing}
-                className="text-sm bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                onClick={enterDisputeMode}
+                className="text-sm bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
-                {isDisputing ? "Generating..." : `Dispute ${redItems.length} Issue${redItems.length !== 1 ? "s" : ""}`}
+                Dispute Charges
               </button>
             )}
           </div>
         </div>
 
+        {/* Existing disputes */}
+        {disputes.length > 0 && (
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">Disputes</h2>
+            <div className="space-y-2">
+              {disputes.map((d) => (
+                <Link
+                  key={d.id}
+                  to={`/bills/${id}/disputes/${d.id}`}
+                  className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-5 py-3.5 hover:shadow-md transition-shadow"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
+                      Dispute #{d.id} &mdash; {d.line_items.length} charge{d.line_items.length !== 1 ? "s" : ""}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatDate(d.created_at)}</p>
+                  </div>
+                  <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${DISPUTE_STATUS_STYLES[d.status] || "bg-gray-100 text-gray-600"}`}>
+                    {d.status}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Line items */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Line Items ({bill.line_items?.length || 0})
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Line Items ({bill.line_items?.length || 0})
+            </h2>
+            {disputeMode && (
+              <p className="text-sm text-gray-500">
+                Select the charges you want to dispute
+              </p>
+            )}
+          </div>
+
           {bill.line_items?.length > 0 ? (
             <div className="space-y-3">
-              {bill.line_items.map((item) => (
-                <LineItemCard key={item.id} item={item} />
-              ))}
+              {bill.line_items.map((item) => {
+                const isSelectable = disputeMode && (item.risk_level === "red" || item.risk_level === "yellow");
+                return (
+                  <LineItemCard
+                    key={item.id}
+                    item={item}
+                    selectable={isSelectable}
+                    selected={selectedIds.has(item.id)}
+                    onToggle={toggleItemSelection}
+                  />
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-gray-500">No line items extracted yet.</p>
@@ -217,7 +297,6 @@ export default function BillDetailPage() {
             <p className="text-sm text-gray-500">Get plain-English explanations from AI</p>
           </div>
 
-          {/* Messages */}
           <div className="px-6 py-4 space-y-4 max-h-80 overflow-y-auto">
             {chatMessages.length === 0 && (
               <p className="text-sm text-gray-400 text-center py-6">
@@ -236,7 +315,24 @@ export default function BillDetailPage() {
                       : "bg-gray-100 text-gray-800 rounded-bl-sm"
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === "assistant" ? (
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                        ul: ({ children }) => <ul className="list-disc list-inside mt-1 space-y-0.5">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal list-inside mt-1 space-y-0.5">{children}</ol>,
+                        li: ({ children }) => <li>{children}</li>,
+                        h1: ({ children }) => <p className="font-bold text-base mb-1">{children}</p>,
+                        h2: ({ children }) => <p className="font-bold mb-1">{children}</p>,
+                        h3: ({ children }) => <p className="font-semibold mb-0.5">{children}</p>,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))}
@@ -250,7 +346,6 @@ export default function BillDetailPage() {
             <div ref={chatBottomRef} />
           </div>
 
-          {/* Input */}
           <form
             onSubmit={handleSendMessage}
             className="px-4 py-4 border-t border-gray-100 flex gap-3"
@@ -273,6 +368,32 @@ export default function BillDetailPage() {
           </form>
         </div>
       </main>
+
+      {/* Dispute selection action bar */}
+      {disputeMode && (
+        <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 shadow-lg z-50">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold">{selectedIds.size}</span> charge{selectedIds.size !== 1 ? "s" : ""} selected
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setDisputeMode(false); setSelectedIds(new Set()); }}
+                className="text-sm text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitDispute}
+                disabled={isDisputing || selectedIds.size === 0}
+                className="text-sm bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors font-medium"
+              >
+                {isDisputing ? "Generating letter..." : `Generate Dispute Letter`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

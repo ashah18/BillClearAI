@@ -7,7 +7,7 @@ from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from bills.models import Bill
-from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
+from .serializers import LoginSerializer, ProfileSerializer, RegisterSerializer, UserSerializer
 
 
 class RegisterView(APIView):
@@ -119,6 +119,22 @@ class LogoutView(APIView):
         response = Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
         response.delete_cookie("refresh_token")
         return response
+
+
+class ProfileView(APIView):
+    """Get or update the authenticated user's profile."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+
+    def put(self, request):
+        serializer = ProfileSerializer(request.user, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(request.user).data)
 
 
 class UserSavingsView(APIView):

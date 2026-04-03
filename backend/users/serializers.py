@@ -44,9 +44,43 @@ class LoginSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for user profile data."""
+    """Serializer for user profile data (returned on login and profile GET)."""
 
     class Meta:
         model = User
-        fields = ["id", "email", "zip_code", "insurance_provider", "plan_type", "language_pref"]
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "street_address",
+            "city",
+            "state",
+            "zip_code",
+            "phone_number",
+            "date_of_birth",
+            "insurance_provider",
+            "plan_type",
+            "language_pref",
+        ]
         read_only_fields = ["id", "email"]
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    """Serializer for updating a user's profile fields."""
+
+    class Meta:
+        model = User
+        fields = [
+            "first_name",
+            "last_name",
+            "street_address",
+            "city",
+            "state",
+            "zip_code",
+            "phone_number",
+            "date_of_birth",
+            "insurance_provider",
+            "plan_type",
+            "language_pref",
+        ]

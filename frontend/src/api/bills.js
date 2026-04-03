@@ -50,6 +50,15 @@ export async function createDispute(id, lineItemIds = []) {
 }
 
 /**
+ * Get all disputes for a bill.
+ * @param {number} id - Bill ID.
+ */
+export async function getBillDisputes(id) {
+  const response = await api.get(`/bills/${id}/disputes/`);
+  return response.data;
+}
+
+/**
  * Get a specific dispute for a bill.
  * @param {number} id - Bill ID.
  * @param {number} disputeId - Dispute ID.
@@ -76,6 +85,14 @@ export async function sendChatMessage(id, message) {
 export async function getChatHistory(id) {
   const response = await api.get(`/bills/${id}/chat/`);
   return response.data;
+}
+
+/**
+ * Delete a bill by ID.
+ * @param {number} id - Bill ID.
+ */
+export async function deleteBill(id) {
+  await api.delete(`/bills/${id}/`);
 }
 
 /**

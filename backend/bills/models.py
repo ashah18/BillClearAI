@@ -1,5 +1,7 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 
 
 class Bill(models.Model):
@@ -68,6 +70,7 @@ class LineItem(models.Model):
     regional_average = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     risk_level = models.CharField(max_length=10, choices=RISK_LEVEL_CHOICES, default="green")
     error_type = models.CharField(max_length=50, blank=True, null=True)
+    flag_explanation = models.TextField(blank=True, default="")
 
     def __str__(self):
         code = self.cpt_code or self.hcpcs_code or "N/A"
@@ -97,3 +100,10 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"[{self.role}] {self.content[:60]}"
+
+
+@receiver(post_delete, sender=Bill)
+def delete_bill_file_on_delete(sender, instance, **kwargs):
+    """Delete the original bill file from storage when the Bill record is deleted."""
+    if instance.original_file:
+        instance.original_file.delete(save=False)

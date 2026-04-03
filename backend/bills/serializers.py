@@ -20,6 +20,7 @@ class LineItemSerializer(serializers.ModelSerializer):
             "regional_average",
             "risk_level",
             "error_type",
+            "flag_explanation",
         ]
 
 

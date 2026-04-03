@@ -60,20 +60,15 @@ class BillUploadView(APIView):
 
         except Exception as exc:
             logger.exception("Error processing bill %s: %s", bill.pk, exc)
-            # Bill is saved; AI analysis failed but we still return the bill
-            return Response(
-                {
-                    "detail": "Bill uploaded but AI analysis failed. You can retry analysis.",
-                    "bill": BillSerializer(bill).data,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+            # Bill is saved; return it directly so the frontend can navigate to it
+            bill.refresh_from_db()
+            return Response(BillSerializer(bill).data, status=status.HTTP_201_CREATED)
 
         return Response(BillSerializer(bill).data, status=status.HTTP_201_CREATED)
 
 
 class BillDetailView(APIView):
-    """Retrieve full detail for a single bill including its line items."""
+    """Retrieve or delete a single bill."""
 
     permission_classes = [IsAuthenticated]
 
@@ -81,6 +76,11 @@ class BillDetailView(APIView):
         bill = get_object_or_404(Bill, pk=pk, user=request.user)
         serializer = BillSerializer(bill)
         return Response(serializer.data)
+
+    def delete(self, request, pk):
+        bill = get_object_or_404(Bill, pk=pk, user=request.user)
+        bill.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class BillAnalyzeView(APIView):

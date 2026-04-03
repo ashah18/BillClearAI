@@ -37,6 +37,12 @@ export default function Navbar() {
               >
                 Upload Bill
               </Link>
+              <Link
+                to="/profile"
+                className="text-sm text-gray-600 hover:text-blue-600 font-medium transition-colors"
+              >
+                Profile
+              </Link>
               <button
                 onClick={handleLogout}
                 className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors font-medium"

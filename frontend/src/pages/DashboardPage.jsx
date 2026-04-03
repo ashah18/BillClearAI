@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getBills, getUserSavings } from "../api/bills.js";
+import { getBills, getUserSavings, deleteBill } from "../api/bills.js";
 import Navbar from "../components/Navbar.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 
@@ -19,6 +19,21 @@ export default function DashboardPage() {
   const [savings, setSavings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
+
+  async function handleDelete(e, billId) {
+    e.preventDefault();
+    if (!window.confirm("Delete this bill? This cannot be undone.")) return;
+    setDeletingId(billId);
+    try {
+      await deleteBill(billId);
+      setBills((prev) => prev.filter((b) => b.id !== billId));
+    } catch {
+      setError("Failed to delete bill. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -112,6 +127,23 @@ export default function DashboardPage() {
                   >
                     {bill.status}
                   </span>
+                  <button
+                    onClick={(e) => handleDelete(e, bill.id)}
+                    disabled={deletingId === bill.id}
+                    className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 p-1"
+                    title="Delete bill"
+                  >
+                    {deletingId === bill.id ? (
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
             </Link>
