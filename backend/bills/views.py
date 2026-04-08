@@ -54,14 +54,23 @@ class BillUploadView(APIView):
                     quantity=item_data.get("quantity", 1),
                     charged_amount=item_data.get("charged_amount", 0),
                     allowed_amount=item_data.get("allowed_amount"),
+                    confidence=float(item_data.get("confidence") or 1.0),
                 )
 
             services.analyze_line_items(bill)
 
         except Exception as exc:
             logger.exception("Error processing bill %s: %s", bill.pk, exc)
-            # Bill is saved; return it directly so the frontend can navigate to it
             bill.refresh_from_db()
+            # parse_bill raises after setting status=failed; any other exception needs the same
+            if bill.status != "failed":
+                bill.status = "failed"
+                bill.error_message = (
+                    "We had trouble reading this bill. This could be because the image is "
+                    "blurry, at an angle, or doesn't contain itemized charges. Try uploading "
+                    "a clearer photo or a PDF version of your itemized bill."
+                )
+                bill.save(update_fields=["status", "error_message"])
             return Response(BillSerializer(bill).data, status=status.HTTP_201_CREATED)
 
         return Response(BillSerializer(bill).data, status=status.HTTP_201_CREATED)

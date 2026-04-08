@@ -8,6 +8,7 @@ import {
   sendChatMessage,
   createDispute,
   analyzeBill,
+  deleteBill,
 } from "../api/bills.js";
 import Navbar from "../components/Navbar.jsx";
 import LineItemCard from "../components/LineItemCard.jsx";
@@ -35,6 +36,7 @@ export default function BillDetailPage() {
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isReuploading, setIsReuploading] = useState(false);
   const [isDisputing, setIsDisputing] = useState(false);
   const [error, setError] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -133,6 +135,17 @@ export default function BillDetailPage() {
     }
   }
 
+  async function handleReupload() {
+    setIsReuploading(true);
+    try {
+      await deleteBill(id);
+      navigate("/upload");
+    } catch {
+      setError("Failed to delete bill. Please try again.");
+      setIsReuploading(false);
+    }
+  }
+
   async function handleReanalyze() {
     setIsAnalyzing(true);
     try {
@@ -212,6 +225,24 @@ export default function BillDetailPage() {
             ))}
           </div>
 
+          {/* Failed parse — hard error */}
+          {bill.status === "failed" && (
+            <div className="mt-5 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <p className="text-sm font-semibold text-red-700 mb-0.5">Trouble reading this bill</p>
+              <p className="text-sm text-red-600">
+                {bill.error_message ||
+                  "We had trouble reading this bill. This could be because the image is blurry, at an angle, or doesn't contain itemized charges. Try uploading a clearer photo or a PDF version of your itemized bill."}
+              </p>
+            </div>
+          )}
+          {/* Soft parse warning (payment reminder, low confidence) */}
+          {bill.status !== "failed" && bill.parse_status === "warning" && (
+            <div className="mt-5 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
+              <p className="text-sm font-semibold text-yellow-800 mb-0.5">Heads up</p>
+              <p className="text-sm text-yellow-700">{bill.parse_message}</p>
+            </div>
+          )}
+
           <div className="flex gap-3 mt-6">
             <button
               onClick={handleReanalyze}
@@ -219,6 +250,13 @@ export default function BillDetailPage() {
               className="text-sm text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
             >
               {isAnalyzing ? "Re-analyzing..." : "Re-analyze"}
+            </button>
+            <button
+              onClick={handleReupload}
+              disabled={isReuploading || disputeMode}
+              className="text-sm text-gray-600 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {isReuploading ? "Deleting..." : "Re-upload"}
             </button>
             {hasIssues && !disputeMode && (
               <button

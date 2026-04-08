@@ -21,6 +21,7 @@ class LineItemSerializer(serializers.ModelSerializer):
             "risk_level",
             "error_type",
             "flag_explanation",
+            "confidence",
         ]
 
 
@@ -40,6 +41,9 @@ class BillSerializer(serializers.ModelSerializer):
             "total_allowed",
             "patient_responsibility",
             "status",
+            "error_message",
+            "parse_status",
+            "parse_message",
             "original_file",
             "created_at",
             "line_items",

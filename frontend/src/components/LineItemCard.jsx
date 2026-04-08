@@ -32,7 +32,10 @@ export default function LineItemCard({ item, selectable = false, selected = fals
     risk_level,
     error_type,
     flag_explanation,
+    confidence,
   } = item;
+
+  const isLowConfidence = typeof confidence === "number" && confidence < 0.7;
 
   const code = cpt_code || hcpcs_code || null;
 
@@ -89,6 +92,11 @@ export default function LineItemCard({ item, selectable = false, selected = fals
           <span className="text-base font-semibold text-gray-900">
             {formatCurrency(charged_amount)}
           </span>
+          {isLowConfidence && (
+            <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              low confidence — verify
+            </span>
+          )}
           <RiskBadge risk_level={risk_level} />
         </div>
         <svg
@@ -183,6 +191,20 @@ export default function LineItemCard({ item, selectable = false, selected = fals
               </div>
             )}
           </div>
+
+          {/* Low confidence warning */}
+          {isLowConfidence && (
+            <div className="rounded-lg p-3 text-sm bg-orange-50 text-orange-800 border border-orange-100">
+              <p className="font-semibold text-xs uppercase tracking-wide mb-1 opacity-70">
+                Low confidence extraction
+              </p>
+              <p>
+                This line item was extracted with {Math.round(confidence * 100)}% confidence.
+                The source document may be at an angle, blurry, or use an unusual format.
+                Please verify this charge against your original bill before disputing.
+              </p>
+            </div>
+          )}
 
           {/* Flag explanation */}
           {flag_explanation && (

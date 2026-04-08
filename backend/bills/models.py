@@ -21,6 +21,13 @@ class Bill(models.Model):
         ("reviewed", "Reviewed"),
         ("disputed", "Disputed"),
         ("resolved", "Resolved"),
+        ("failed", "Failed"),
+    ]
+
+    PARSE_STATUS_CHOICES = [
+        ("ok", "OK"),
+        ("warning", "Warning"),
+        ("error", "Error"),
     ]
 
     user = models.ForeignKey(
@@ -39,6 +46,9 @@ class Bill(models.Model):
     total_allowed = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     patient_responsibility = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
+    parse_status = models.CharField(max_length=20, choices=PARSE_STATUS_CHOICES, default="ok")
+    parse_message = models.TextField(blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
     original_file = models.FileField(upload_to="bills/", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -71,6 +81,7 @@ class LineItem(models.Model):
     risk_level = models.CharField(max_length=10, choices=RISK_LEVEL_CHOICES, default="green")
     error_type = models.CharField(max_length=50, blank=True, null=True)
     flag_explanation = models.TextField(blank=True, default="")
+    confidence = models.FloatField(default=1.0)
 
     def __str__(self):
         code = self.cpt_code or self.hcpcs_code or "N/A"

@@ -24,10 +24,15 @@ def _get_client() -> anthropic.Anthropic:
 
 def parse_bill(bill_instance) -> dict:
     """
-    Parse a medical bill file using Claude's vision capability.
+    Parse a medical bill file using Claude's vision/document capability.
 
-    Sends the uploaded bill image/PDF to Claude with a structured extraction
-    prompt. Returns a dict of extracted data and updates the Bill model fields.
+    Handles images (JPEG, PNG) and PDFs. PDFs are sent using Claude's native
+    document support, which handles multi-page documents automatically. Images
+    are sent via the vision API.
+
+    Detects bill type (itemized, summary, payment reminder, EOB) and sets
+    parse_status/parse_message on the bill instance accordingly. Each line item
+    includes a confidence score (0–1) indicating extraction reliability.
 
     Args:
         bill_instance: A bills.models.Bill instance with an uploaded original_file.
@@ -37,7 +42,6 @@ def parse_bill(bill_instance) -> dict:
     """
     client = _get_client()
 
-    # Read the uploaded file and encode it for the API
     bill_instance.original_file.open("rb")
     file_bytes = bill_instance.original_file.read()
     bill_instance.original_file.close()
@@ -54,34 +58,70 @@ def parse_bill(bill_instance) -> dict:
 
     encoded_file = base64.standard_b64encode(file_bytes).decode("utf-8")
 
-    system_prompt = """You are a medical billing expert. Your task is to extract structured data
-from a medical bill or Explanation of Benefits (EOB) document.
+    # PDFs use Claude's document support; images use the vision API
+    if media_type == "application/pdf":
+        file_content_block = {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": encoded_file,
+            },
+        }
+    else:
+        file_content_block = {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": encoded_file,
+            },
+        }
 
-Return ONLY valid JSON with this exact structure:
+    system_prompt = """You are a medical billing expert. Extract structured data from any medical
+billing document — including itemized bills, summary bills, EOBs, and payment reminders.
+
+Return ONLY valid JSON with this exact structure (no text outside the JSON):
 {
-  "provider_name": "string",
+  "bill_type": "itemized|summary|payment_reminder|eob|other",
+  "parse_confidence": <float 0.0–1.0 for overall extraction quality>,
+  "provider_name": "string or null",
   "facility_type": "hospital|clinic|lab|pharmacy|specialist|other",
   "date_of_service": "YYYY-MM-DD or null",
-  "total_charged": number or null,
-  "total_allowed": number or null,
-  "patient_responsibility": number or null,
+  "total_charged": <number or null>,
+  "total_allowed": <number or null>,
+  "patient_responsibility": <number or null>,
   "line_items": [
     {
-      "cpt_code": "5-digit string or null",
-      "hcpcs_code": "string or null",
+      "cpt_code": "<5-digit string or null>",
+      "hcpcs_code": "<string or null>",
       "icd10_codes": ["list", "of", "codes"],
-      "description_raw": "exact text from bill",
-      "quantity": integer,
-      "charged_amount": number,
-      "allowed_amount": number or null
+      "description_raw": "<exact text from bill>",
+      "quantity": <integer>,
+      "charged_amount": <number>,
+      "allowed_amount": <number or null>,
+      "confidence": <float 0.0–1.0 for this line item>
     }
   ]
 }
 
-Rules:
+Rules for bill_type:
+- "itemized": contains individual service lines with codes or specific descriptions
+- "summary": department-level or category charges without specific CPT codes — STILL extract each line as a line item
+- "payment_reminder": a notice of amount owed, not a breakdown of services
+- "eob": Explanation of Benefits from an insurer
+- "other": anything else
+
+Rules for extraction:
+- For summary bills (no CPT codes): treat each department or service category as a line item.
+  Set cpt_code to null and use the department/category name as description_raw.
+- For images that are blurry, angled, or have poor lighting: do your best to extract data.
+  Set confidence low (0.2–0.5) for fields you are uncertain about, and set parse_confidence
+  accordingly. Do not return an empty result — extract whatever is readable.
 - CPT codes must be exactly 5 digits. Set to null if not clearly identifiable.
-- Extract ALL line items visible on the bill.
-- If a field is not present, use null.
+- Extract ALL line items visible, including subtotals by department if no line-level detail exists.
+- Set confidence = 1.0 for clearly legible fields, lower for uncertain ones.
+- If a field is not present or not readable, use null.
 - Do not include any text outside the JSON object."""
 
     response = client.messages.create(
@@ -92,17 +132,10 @@ Rules:
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": encoded_file,
-                        },
-                    },
+                    file_content_block,
                     {
                         "type": "text",
-                        "text": "Please extract all billing information from this medical bill.",
+                        "text": "Extract all billing information from this document.",
                     },
                 ],
             }
@@ -110,15 +143,13 @@ Rules:
     )
 
     raw_text = response.content[0].text.strip()
-
-    # Strip markdown code fences if present
     if raw_text.startswith("```"):
         raw_text = raw_text.split("\n", 1)[1]
         raw_text = raw_text.rsplit("```", 1)[0]
 
     parsed_data = json.loads(raw_text)
 
-    # Update bill instance fields
+    # Update bill instance scalar fields
     bill_instance.provider_name = parsed_data.get("provider_name") or ""
     bill_instance.facility_type = parsed_data.get("facility_type") or "other"
     bill_instance.total_charged = parsed_data.get("total_charged")
@@ -132,6 +163,41 @@ Rules:
             bill_instance.date_of_service = date.fromisoformat(date_str)
         except ValueError:
             bill_instance.date_of_service = None
+
+    bill_type = parsed_data.get("bill_type", "itemized")
+    parse_confidence = float(parsed_data.get("parse_confidence") or 1.0)
+    line_items = parsed_data.get("line_items", [])
+
+    _PARSE_FAIL_MSG = (
+        "We had trouble reading this bill. This could be because the image is blurry, "
+        "at an angle, or doesn't contain itemized charges. Try uploading a clearer photo "
+        "or a PDF version of your itemized bill."
+    )
+
+    # Hard failure: no provider name OR no line items extracted
+    if not bill_instance.provider_name or not line_items:
+        bill_instance.status = "failed"
+        bill_instance.error_message = _PARSE_FAIL_MSG
+        bill_instance.save()
+        raise ValueError("Insufficient data extracted — provider or line items missing.")
+
+    # Soft warnings (payment reminder, low confidence) — bill is still usable
+    if bill_type == "payment_reminder":
+        bill_instance.parse_status = "warning"
+        bill_instance.parse_message = (
+            "This looks like a payment reminder or balance statement, not an itemized bill. "
+            "To dispute charges, request an itemized bill from your provider that lists each "
+            "service with its billing code."
+        )
+    elif parse_confidence < 0.55:
+        bill_instance.parse_status = "warning"
+        bill_instance.parse_message = (
+            "Some fields were extracted with low confidence — the document may be at an angle "
+            "or use an unusual format. Please review each line item carefully before disputing."
+        )
+    else:
+        bill_instance.parse_status = "ok"
+        bill_instance.parse_message = ""
 
     bill_instance.save()
 
