@@ -212,18 +212,32 @@ export default function BillDetailPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            {[
-              { label: "Total Charged", value: formatCurrency(bill.total_charged) },
-              { label: "Total Allowed", value: formatCurrency(bill.total_allowed) },
-              { label: "Your Responsibility", value: formatCurrency(bill.patient_responsibility) },
-            ].map(({ label, value }) => (
-              <div key={label} className="text-center">
-                <p className="text-lg font-bold text-gray-900">{value}</p>
-                <p className="text-xs text-gray-500">{label}</p>
+          {(() => {
+            const lineItemTotal = (bill.line_items || []).reduce(
+              (sum, i) => sum + parseFloat(i.charged_amount || 0),
+              0
+            );
+            const totalCharged = bill.total_charged ?? lineItemTotal;
+            const totalResponsibility = bill.patient_responsibility ?? lineItemTotal;
+            const hasAllowed = bill.total_allowed != null;
+
+            const stats = [
+              { label: "Total Charged", value: formatCurrency(totalCharged) },
+              ...(hasAllowed ? [{ label: "Total Allowed", value: formatCurrency(bill.total_allowed) }] : []),
+              { label: "Your Responsibility", value: formatCurrency(totalResponsibility) },
+            ];
+
+            return (
+              <div className={`grid gap-4 mt-6 ${stats.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+                {stats.map(({ label, value }) => (
+                  <div key={label} className="text-center">
+                    <p className="text-lg font-bold text-gray-900">{value}</p>
+                    <p className="text-xs text-gray-500">{label}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {/* Failed parse — hard error */}
           {bill.status === "failed" && (

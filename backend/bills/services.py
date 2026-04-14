@@ -296,6 +296,13 @@ Return null for error_type and empty string for flag_explanation when risk_level
             item.flag_explanation = result.get("flag_explanation") or ""
             item.save()
 
+    # Enrich with CMS regional pricing (sets regional_average, may escalate risk_level)
+    try:
+        from pricing.services import enrich_line_items_with_pricing
+        enrich_line_items_with_pricing(bill_instance)
+    except Exception:
+        logger.warning("Pricing enrichment failed for bill %s — skipping", bill_instance.pk)
+
     # Update bill status from new to reviewed
     if bill_instance.status == "new":
         bill_instance.status = "reviewed"
