@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import { saveAs } from "file-saver";
+import api from "../api/axios.js";
 import {
   getBillDetail,
   getBillDisputes,
@@ -44,6 +46,7 @@ export default function BillDetailPage() {
   // Dispute selection mode
   const [disputeMode, setDisputeMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [downloadingDisputeId, setDownloadingDisputeId] = useState(null);
 
   const chatBottomRef = useRef(null);
 
@@ -102,6 +105,24 @@ export default function BillDetailPage() {
       setError("Failed to generate dispute letter. Please try again.");
     } finally {
       setIsDisputing(false);
+    }
+  }
+
+  async function handleDownloadDispute(disputeId) {
+    setDownloadingDisputeId(disputeId);
+    try {
+      const response = await api.get(
+        `/bills/${id}/dispute/${disputeId}/download/`,
+        { responseType: "blob" }
+      );
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      saveAs(blob, `dispute-letter-${disputeId}.docx`);
+    } catch {
+      // download failed silently
+    } finally {
+      setDownloadingDisputeId(null);
     }
   }
 
@@ -289,21 +310,32 @@ export default function BillDetailPage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-3">Disputes</h2>
             <div className="space-y-2">
               {disputes.map((d) => (
-                <Link
+                <div
                   key={d.id}
-                  to={`/bills/${id}/disputes/${d.id}`}
-                  className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-5 py-3.5 hover:shadow-md transition-shadow"
+                  className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-5 py-3.5 hover:shadow-sm transition-shadow"
                 >
-                  <div>
+                  <Link to={`/bills/${id}/disputes/${d.id}`} className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900">
                       Dispute #{d.id} &mdash; {d.line_items.length} charge{d.line_items.length !== 1 ? "s" : ""}
                     </p>
                     <p className="text-xs text-gray-400 mt-0.5">{formatDate(d.created_at)}</p>
+                  </Link>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${DISPUTE_STATUS_STYLES[d.status] || "bg-gray-100 text-gray-600"}`}>
+                      {d.status}
+                    </span>
+                    <button
+                      onClick={() => handleDownloadDispute(d.id)}
+                      disabled={downloadingDisputeId === d.id || !d.letter_pdf}
+                      className="flex items-center gap-1 text-xs text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      {downloadingDisputeId === d.id ? "Preparing…" : "Download"}
+                    </button>
                   </div>
-                  <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${DISPUTE_STATUS_STYLES[d.status] || "bg-gray-100 text-gray-600"}`}>
-                    {d.status}
-                  </span>
-                </Link>
+                </div>
               ))}
             </div>
           </div>

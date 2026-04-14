@@ -350,6 +350,7 @@ def generate_dispute_letter(dispute_instance) -> None:
     if user.zip_code:
         city_state_zip_parts.append(user.zip_code)
     city_state_zip = ", ".join(city_state_zip_parts) if city_state_zip_parts else "[CITY, STATE ZIP]"
+    dob_str = user.date_of_birth.strftime("%B %d, %Y") if user.date_of_birth else None
 
     today_str = _date.today().strftime("%B %d, %Y")
     provider = bill.provider_name or "Healthcare Provider"
@@ -412,6 +413,8 @@ def generate_dispute_letter(dispute_instance) -> None:
     _add_para(patient_name, bold=True, space_after=2)
     _add_para(street, space_after=2)
     _add_para(city_state_zip, space_after=2)
+    if dob_str:
+        _add_para(f"Date of Birth: {dob_str}", space_after=2)
     _add_para(patient_phone, space_after=2)
     _add_para(patient_email, space_after=12)
 
@@ -556,12 +559,14 @@ def generate_dispute_letter(dispute_instance) -> None:
     dispute_instance.letter_pdf.save(filename, ContentFile(buffer.read()), save=False)
 
     # ── Build plain-text preview for letter_content ───────────────────────────
+    dob_lines = [f"Date of Birth: {dob_str}"] if dob_str else []
     lines = [
         "NOTE: Download the Word document below for the fully formatted letter.",
         "",
         patient_name,
         street,
         city_state_zip,
+        *dob_lines,
         patient_phone,
         patient_email,
         "",
