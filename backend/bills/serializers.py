@@ -29,6 +29,7 @@ class BillSerializer(serializers.ModelSerializer):
     """Serializer for bill objects, optionally including nested line items."""
 
     line_items = LineItemSerializer(many=True, read_only=True)
+    potential_savings = serializers.SerializerMethodField()
 
     class Meta:
         model = Bill
@@ -47,8 +48,13 @@ class BillSerializer(serializers.ModelSerializer):
             "original_file",
             "created_at",
             "line_items",
+            "potential_savings",
         ]
         read_only_fields = ["id", "created_at", "original_file"]
+
+    def get_potential_savings(self, obj):
+        from .services import calculate_bill_savings
+        return calculate_bill_savings(obj.line_items.all())
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):

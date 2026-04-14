@@ -260,6 +260,18 @@ export default function BillDetailPage() {
             );
           })()}
 
+          {/* Potential savings banner */}
+          {bill.potential_savings > 0 && bill.status !== "failed" && (
+            <div className="mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
+              <p className="text-sm font-semibold text-green-700">
+                Up to {formatCurrency(bill.potential_savings)} in potential savings identified
+              </p>
+              <p className="text-xs text-green-600 mt-0.5">
+                Based on pricing data and billing error analysis — dispute flagged charges to recover this amount
+              </p>
+            </div>
+          )}
+
           {/* Failed parse — hard error */}
           {bill.status === "failed" && (
             <div className="mt-5 bg-red-50 border border-red-200 rounded-xl px-4 py-3">

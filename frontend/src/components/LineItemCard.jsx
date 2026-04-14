@@ -36,17 +36,20 @@ export default function LineItemCard({ item, selectable = false, selected = fals
   } = item;
 
   const isLowConfidence = typeof confidence === "number" && confidence < 0.7;
+  const isCredit = parseFloat(charged_amount) < 0;
 
   const code = cpt_code || hcpcs_code || null;
 
   return (
     <div
-      className={`bg-white border rounded-lg shadow-sm transition-shadow ${
-        selected
-          ? "border-blue-400 ring-2 ring-blue-100"
+      className={`border rounded-lg shadow-sm transition-shadow ${
+        isCredit
+          ? "bg-gray-50 border-gray-300"
+          : selected
+          ? "bg-white border-blue-400 ring-2 ring-blue-100"
           : expanded
-          ? "border-blue-200 shadow-md"
-          : "border-gray-200 hover:shadow-md"
+          ? "bg-white border-blue-200 shadow-md"
+          : "bg-white border-gray-200 hover:shadow-md"
       }`}
     >
       {/* Collapsed row — always visible */}
@@ -89,15 +92,20 @@ export default function LineItemCard({ item, selectable = false, selected = fals
           )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className="text-base font-semibold text-gray-900">
+          <span className={`text-base font-semibold ${isCredit ? "text-gray-500" : "text-gray-900"}`}>
             {formatCurrency(charged_amount)}
           </span>
+          {isCredit && (
+            <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              Credit / Payment
+            </span>
+          )}
           {isLowConfidence && (
             <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
               low confidence — verify
             </span>
           )}
-          <RiskBadge risk_level={risk_level} />
+          {!isCredit && <RiskBadge risk_level={risk_level} />}
         </div>
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -166,7 +174,7 @@ export default function LineItemCard({ item, selectable = false, selected = fals
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="text-center bg-gray-50 rounded-lg p-3">
               <p className="text-base font-bold text-gray-900">{formatCurrency(charged_amount)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Charged</p>
+              <p className="text-xs text-gray-500 mt-0.5">You Were Charged</p>
             </div>
             {allowed_amount != null && (
               <div className="text-center bg-gray-50 rounded-lg p-3">
@@ -177,17 +185,17 @@ export default function LineItemCard({ item, selectable = false, selected = fals
             {regional_average != null && (
               <div className="text-center bg-green-50 rounded-lg p-3">
                 <p className="text-base font-bold text-green-700">{formatCurrency(regional_average)}</p>
-                <p className="text-xs text-green-600 mt-0.5">Regional Avg</p>
+                <p className="text-xs text-green-600 mt-0.5">Medicare Rate</p>
               </div>
             )}
             {regional_average != null && (
-              <div className="text-center bg-gray-50 rounded-lg p-3">
-                <p className={`text-base font-bold ${parseFloat(charged_amount) > parseFloat(regional_average) ? "text-red-600" : "text-green-600"}`}>
-                  {parseFloat(charged_amount) > parseFloat(regional_average)
-                    ? `+${formatCurrency(parseFloat(charged_amount) - parseFloat(regional_average))}`
-                    : `-${formatCurrency(parseFloat(regional_average) - parseFloat(charged_amount))}`}
+              <div className="text-center bg-blue-50 rounded-lg p-3">
+                <p className="text-sm font-bold text-blue-700">
+                  {formatCurrency(parseFloat(regional_average) * 1.5)}
+                  {" – "}
+                  {formatCurrency(parseFloat(regional_average) * 3)}
                 </p>
-                <p className="text-xs text-gray-500 mt-0.5">vs. Regional</p>
+                <p className="text-xs text-blue-600 mt-0.5">Typical Commercial Range</p>
               </div>
             )}
           </div>

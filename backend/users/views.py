@@ -143,23 +143,31 @@ class UserSavingsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from bills.models import LineItem
+        from bills.services import calculate_bill_savings
         from disputes.models import Dispute
 
         user_bills = Bill.objects.filter(user=request.user)
-        bill_ids = user_bills.values_list("id", flat=True)
+        bill_ids = list(user_bills.values_list("id", flat=True))
 
+        # Potential savings: apply per-item rules across all user line items
+        all_line_items = LineItem.objects.filter(bill_id__in=bill_ids)
+        potential_savings = calculate_bill_savings(all_line_items)
+
+        # Confirmed savings: resolved disputes with a recorded savings_amount
         disputes = Dispute.objects.filter(bill_id__in=bill_ids, status="resolved")
-
-        total_savings = sum(
+        confirmed_savings = sum(
             d.savings_amount for d in disputes if d.savings_amount is not None
         )
+
         total_bills = user_bills.count()
         disputed_bills = user_bills.filter(status="disputed").count()
         resolved_bills = user_bills.filter(status="resolved").count()
 
         return Response(
             {
-                "total_savings": float(total_savings),
+                "potential_savings": float(potential_savings),
+                "confirmed_savings": float(confirmed_savings),
                 "total_bills": total_bills,
                 "disputed_bills": disputed_bills,
                 "resolved_bills": resolved_bills,

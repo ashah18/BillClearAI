@@ -118,7 +118,13 @@ Rules for extraction:
 - For images that are blurry, angled, or have poor lighting: do your best to extract data.
   Set confidence low (0.2–0.5) for fields you are uncertain about, and set parse_confidence
   accordingly. Do not return an empty result — extract whatever is readable.
-- CPT codes must be exactly 5 digits. Set to null if not clearly identifiable.
+- CPT codes must be exactly 5 digits (e.g., 99213, 71046). Set to null if not clearly identifiable.
+- CDT (dental) codes begin with the letter D followed by 4 digits (e.g., D2740, D0220, D0330).
+  Extract CDT codes into the cpt_code field exactly as they appear (e.g., "D2740"). They are valid
+  billing codes for dental services and should be treated the same as CPT codes.
+- HCPCS codes begin with a letter A–V followed by 4 digits (e.g., A6216, J0171). These go in hcpcs_code.
+- If no billing code of any type (CPT, CDT, HCPCS) is visible for a line item, set cpt_code to null
+  and hcpcs_code to null. Use description_raw to capture the full service name from the bill.
 - Extract ALL line items visible, including subtotals by department if no line-level detail exists.
 - Set confidence = 1.0 for clearly legible fields, lower for uncertain ones.
 - If a field is not present or not readable, use null.
@@ -202,6 +208,51 @@ Rules for extraction:
     bill_instance.save()
 
     return parsed_data
+
+
+def calculate_bill_savings(line_items) -> float:
+    """
+    Calculate potential savings for a collection of line items.
+
+    Rules (applied in priority order per item):
+    - Skip any item where charged_amount <= 0 (credits, payments).
+    - Duplicates (error_type='duplicate'): full charged_amount, since the charge shouldn't exist.
+    - Unbundled (error_type='unbundled'): full charged_amount, since it should be in another code.
+    - Items with pricing data (regional_average): charged_amount minus regional_average,
+      but only when charged_amount exceeds regional_average (the overcharge only).
+    - All other items: 0 (can't estimate without pricing or a specific error type).
+
+    Args:
+        line_items: Iterable of LineItem model instances or dicts with the same fields.
+
+    Returns:
+        Total estimated potential savings as a float.
+    """
+    total = 0.0
+    for item in line_items:
+        # Support both model instances and dicts
+        if isinstance(item, dict):
+            charged = float(item.get("charged_amount") or 0)
+            error_type = item.get("error_type")
+            regional_average = item.get("regional_average")
+        else:
+            charged = float(item.charged_amount or 0)
+            error_type = item.error_type
+            regional_average = item.regional_average
+
+        if charged <= 0:
+            continue
+
+        if error_type == "duplicate":
+            total += charged
+        elif error_type == "unbundled":
+            total += charged
+        elif regional_average is not None and float(regional_average) > 0:
+            overcharge = charged - float(regional_average)
+            if overcharge > 0:
+                total += overcharge
+
+    return round(total, 2)
 
 
 def analyze_line_items(bill_instance) -> None:
@@ -483,10 +534,10 @@ def generate_dispute_letter(dispute_instance) -> None:
 
     for item in line_items:
         row_cells = table.add_row().cells
-        code = item.cpt_code or item.hcpcs_code or "N/A"
-        desc = item.description_plain or item.description_raw or "N/A"
+        code = item.cpt_code or item.hcpcs_code or item.description_raw or item.description_plain or ""
+        desc = item.description_plain or item.description_raw or ""
         charged = f"${item.charged_amount:,.2f}"
-        allowed = f"${item.allowed_amount:,.2f}" if item.allowed_amount is not None else "N/A"
+        allowed = f"${item.allowed_amount:,.2f}" if item.allowed_amount is not None else "—"
         issue = item.error_type.replace("_", " ").title() if item.error_type else "Under Review"
         for cell, text in zip(row_cells, [code, desc, charged, allowed, issue]):
             cell.paragraphs[0].add_run(text).font.size = Pt(10)
@@ -498,7 +549,7 @@ def generate_dispute_letter(dispute_instance) -> None:
     if flagged:
         _add_para("Additional details on identified issues:", bold=True, space_after=4)
         for item in flagged:
-            code = item.cpt_code or item.hcpcs_code or "N/A"
+            code = item.cpt_code or item.hcpcs_code or item.description_raw or item.description_plain or "Service"
             bullet = doc.add_paragraph(style="List Bullet")
             bullet.paragraph_format.space_after = Pt(4)
             _add_run(bullet, f"{code}: ", bold=True, size=10)
@@ -585,8 +636,8 @@ def generate_dispute_letter(dispute_instance) -> None:
         "Disputed Charges:",
     ]
     for item in line_items:
-        code = item.cpt_code or item.hcpcs_code or "N/A"
-        desc = item.description_plain or item.description_raw or "N/A"
+        code = item.cpt_code or item.hcpcs_code or item.description_raw or item.description_plain or "Service"
+        desc = item.description_plain or item.description_raw or ""
         charged = f"${item.charged_amount:,.2f}"
         issue = item.error_type.replace("_", " ").title() if item.error_type else "Under Review"
         lines.append(f"  • {code} – {desc} | Charged: {charged} | Issue: {issue}")

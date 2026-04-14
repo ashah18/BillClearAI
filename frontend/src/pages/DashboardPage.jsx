@@ -16,7 +16,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
 
   const [bills, setBills] = useState([]);
-  const [totalSavings, setTotalSavings] = useState(0);
+  const [confirmedSavings, setConfirmedSavings] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -26,11 +26,12 @@ export default function DashboardPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  // Stats derived from local bills state — update instantly on delete
+  // Stats and savings derived from local bills state — update instantly on delete
   const stats = useMemo(() => ({
     total_bills: bills.length,
     disputed_bills: bills.filter((b) => b.status === "disputed").length,
     resolved_bills: bills.filter((b) => b.status === "resolved").length,
+    total_potential_savings: bills.reduce((sum, b) => sum + (b.potential_savings || 0), 0),
   }), [bills]);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function DashboardPage() {
       try {
         const [billsData, savingsData] = await Promise.all([getBills(), getUserSavings()]);
         setBills(billsData);
-        setTotalSavings(savingsData.total_savings ?? 0);
+        setConfirmedSavings(savingsData.confirmed_savings ?? 0);
       } catch {
         setError("Failed to load your bills. Please refresh the page.");
       } finally {
@@ -141,13 +142,24 @@ export default function DashboardPage() {
               { label: "Total Bills", value: stats.total_bills },
               { label: "Disputed", value: stats.disputed_bills },
               { label: "Resolved", value: stats.resolved_bills },
-              { label: "Total Saved", value: formatCurrency(totalSavings) },
             ].map(({ label, value }) => (
               <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
                 <p className="text-2xl font-bold text-gray-900">{value}</p>
                 <p className="text-xs text-gray-500 mt-1">{label}</p>
               </div>
             ))}
+            {/* Potential Savings card */}
+            <div className="bg-green-50 rounded-xl border border-green-200 p-4 text-center">
+              <p className="text-lg font-bold text-green-700 leading-tight">
+                Up to {formatCurrency(stats.total_potential_savings)}
+              </p>
+              <p className="text-xs text-green-600 mt-1">Total Potential Savings Across All Bills</p>
+              {confirmedSavings > 0 && (
+                <p className="text-xs text-green-500 mt-1.5">
+                  {formatCurrency(confirmedSavings)} confirmed
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -237,13 +249,28 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-500 mt-0.5">
                       Date of service: {formatDate(bill.date_of_service)}
                     </p>
+                    {bill.potential_savings > 0 && (
+                      <p className="text-xs text-green-600 font-medium mt-1">
+                        Up to {formatCurrency(bill.potential_savings)} in potential savings
+                      </p>
+                    )}
                   </div>
 
                   {/* Right side */}
                   <div className="flex items-center gap-4 shrink-0">
-                    <span className="text-lg font-bold text-gray-900">
-                      {formatCurrency(bill.total_charged)}
-                    </span>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-gray-900">
+                        {bill.total_charged != null
+                          ? formatCurrency(bill.total_charged)
+                          : formatCurrency(
+                              (bill.line_items || []).reduce(
+                                (sum, i) => sum + parseFloat(i.charged_amount || 0),
+                                0
+                              )
+                            )}
+                      </p>
+                      <p className="text-xs text-gray-400">Total Charged</p>
+                    </div>
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_STYLES[bill.status] || "bg-gray-100 text-gray-600"}`}>
                       {bill.status}
                     </span>
