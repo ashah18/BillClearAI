@@ -16,6 +16,7 @@ import {
 import Navbar from "../components/Navbar.jsx";
 import LineItemCard from "../components/LineItemCard.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
+import { useToast } from "../context/ToastContext.jsx";
 
 const DISPUTE_STATUS_STYLES = {
   draft: "bg-gray-100 text-gray-600",
@@ -32,6 +33,7 @@ const DISPUTE_STATUS_STYLES = {
 export default function BillDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { addToast } = useToast();
 
   const [bill, setBill] = useState(null);
   const [disputes, setDisputes] = useState([]);
@@ -111,6 +113,7 @@ export default function BillDetailPage() {
       setDisputes((prev) => [dispute, ...prev]);
       setDisputeMode(false);
       setSelectedIds(new Set());
+      addToast("Dispute letter generated");
       navigate(`/bills/${id}/disputes/${dispute.id}`);
     } catch {
       setError("Failed to generate dispute letter. Please try again.");
@@ -155,6 +158,7 @@ export default function BillDetailPage() {
       payload.savings_amount = savingsInput.trim();
     }
     await handleUpdateDispute(disputeId, payload);
+    addToast("Dispute marked as resolved");
     setResolvingDisputeId(null);
     setSavingsInput("");
   }

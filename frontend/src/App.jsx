@@ -1,10 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { ToastProvider } from "./context/ToastContext.jsx";
 import { useAuth } from "./hooks/useAuth.js";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 import LoginPage from "./pages/LoginPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import OAuthCallbackPage from "./pages/OAuthCallbackPage.jsx";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
+import VerifyEmailPage from "./pages/VerifyEmailPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import UploadPage from "./pages/UploadPage.jsx";
 import BillDetailPage from "./pages/BillDetailPage.jsx";
@@ -75,7 +80,7 @@ function AppRoutes() {
         }
       />
 
-      {/* Public routes */}
+      {/* Public routes (redirect to dashboard if already logged in) */}
       <Route
         path="/login"
         element={
@@ -92,8 +97,19 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
-      {/* OAuth callback — no auth guard, user arrives unauthenticated and logs in here */}
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicRoute>
+            <ForgotPasswordPage />
+          </PublicRoute>
+        }
+      />
+
+      {/* Auth utility routes — no auth guard (user may or may not be logged in) */}
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+      <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
+      <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
 
       {/* Protected routes */}
       <Route
@@ -128,7 +144,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
       <Route
         path="/profile"
         element={
@@ -147,9 +162,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }

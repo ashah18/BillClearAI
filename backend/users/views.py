@@ -1,6 +1,11 @@
 from django.conf import settings
 from django.contrib.auth import logout as auth_logout
+from django.core import signing
+from django.core.mail import send_mail
+from django.contrib.auth.tokens import default_token_generator
 from django.http import HttpResponseRedirect
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
 from django.views import View
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -10,7 +15,16 @@ from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from bills.models import Bill
-from .serializers import LoginSerializer, ProfileSerializer, RegisterSerializer, UserSerializer
+from .models import User
+from .serializers import (
+    ChangePasswordSerializer,
+    LoginSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
+    ProfileSerializer,
+    RegisterSerializer,
+    UserSerializer,
+)
 
 
 class RegisterView(APIView):
@@ -22,6 +36,18 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+
+        # Send email verification link
+        token = signing.dumps(user.pk, salt="email-verify")
+        verify_url = f"{settings.FRONTEND_URL}/verify-email/{token}/"
+        send_mail(
+            subject="Verify your BillClear AI email",
+            message=f"Click the link to verify your email address:\n\n{verify_url}\n\nThis link expires in 7 days.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+
         return Response(
             {"detail": "Account created successfully.", "email": user.email},
             status=status.HTTP_201_CREATED,
@@ -157,6 +183,12 @@ class GoogleJWTView(View):
             )
 
         user = request.user
+
+        # Google-authenticated users have verified emails
+        if not user.email_verified:
+            user.email_verified = True
+            user.save(update_fields=["email_verified"])
+
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
@@ -215,3 +247,126 @@ class UserSavingsView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class VerifyEmailView(APIView):
+    """Verify a user's email address using a signed token from the verification link."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        try:
+            user_pk = signing.loads(token, salt="email-verify", max_age=86400 * 7)
+            user = User.objects.get(pk=user_pk)
+            if not user.email_verified:
+                user.email_verified = True
+                user.save(update_fields=["email_verified"])
+            return Response({"detail": "Email verified successfully."})
+        except signing.SignatureExpired:
+            return Response({"detail": "This verification link has expired."}, status=status.HTTP_400_BAD_REQUEST)
+        except (signing.BadSignature, User.DoesNotExist):
+            return Response({"detail": "Invalid or expired link."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ResendVerificationView(APIView):
+    """Resend the email verification link to the authenticated user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        if user.email_verified:
+            return Response({"detail": "Email already verified."})
+        token = signing.dumps(user.pk, salt="email-verify")
+        verify_url = f"{settings.FRONTEND_URL}/verify-email/{token}/"
+        send_mail(
+            subject="Verify your BillClear AI email",
+            message=f"Click the link to verify your email address:\n\n{verify_url}\n\nThis link expires in 7 days.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+        return Response({"detail": "Verification email sent."})
+
+
+class ChangePasswordView(APIView):
+    """Change the authenticated user's password, re-issuing fresh JWT tokens."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        if not user.check_password(serializer.validated_data["current_password"]):
+            return Response(
+                {"current_password": ["Incorrect password."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+
+        # Re-issue tokens so the current session stays valid
+        refresh = RefreshToken.for_user(user)
+        response = Response({"access": str(refresh.access_token)}, status=status.HTTP_200_OK)
+        response.set_cookie(
+            key="refresh_token",
+            value=str(refresh),
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite="Lax",
+            max_age=7 * 24 * 60 * 60,
+        )
+        return response
+
+
+class PasswordResetRequestView(APIView):
+    """Request a password reset email. Never reveals whether the email exists."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        try:
+            user = User.objects.get(email=email)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
+            send_mail(
+                subject="Reset your BillClear AI password",
+                message=(
+                    f"Click the link below to reset your password:\n\n{reset_url}\n\n"
+                    "This link expires in 24 hours. If you didn't request this, you can ignore this email."
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=True,
+            )
+        except User.DoesNotExist:
+            pass  # Don't reveal whether the email exists
+        return Response({"detail": "If that email exists, a reset link has been sent."})
+
+
+class PasswordResetConfirmView(APIView):
+    """Confirm a password reset using the uid/token from the reset link."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            uid = force_str(urlsafe_base64_decode(serializer.validated_data["uid"]))
+            user = User.objects.get(pk=uid)
+        except (ValueError, TypeError, User.DoesNotExist):
+            return Response({"detail": "Invalid link."}, status=status.HTTP_400_BAD_REQUEST)
+        if not default_token_generator.check_token(user, serializer.validated_data["token"]):
+            return Response(
+                {"detail": "This link is invalid or has expired."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return Response({"detail": "Password reset successfully. You can now sign in."})

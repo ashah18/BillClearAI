@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getBills, getUserSavings, deleteBill } from "../api/bills.js";
+import { resendVerification } from "../api/auth.js";
 import Navbar from "../components/Navbar.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
+import { useAuth } from "../hooks/useAuth.js";
+import { useToast } from "../context/ToastContext.jsx";
 
 const STATUS_STYLES = {
   new: "bg-blue-100 text-blue-700",
@@ -14,11 +17,15 @@ const STATUS_STYLES = {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { addToast } = useToast();
 
   const [bills, setBills] = useState([]);
   const [confirmedSavings, setConfirmedSavings] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [resendSent, setResendSent] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
@@ -49,6 +56,18 @@ export default function DashboardPage() {
     load();
   }, []);
 
+  async function handleResendVerification() {
+    setIsResending(true);
+    try {
+      await resendVerification();
+      setResendSent(true);
+    } catch {
+      // silently fail
+    } finally {
+      setIsResending(false);
+    }
+  }
+
   function exitSelectMode() {
     setSelectMode(false);
     setSelectedIds(new Set());
@@ -78,6 +97,7 @@ export default function DashboardPage() {
     try {
       await Promise.all([...selectedIds].map((id) => deleteBill(id)));
       setBills((prev) => prev.filter((b) => !selectedIds.has(b.id)));
+      addToast(`${selectedIds.size} bill${selectedIds.size !== 1 ? "s" : ""} deleted`);
       exitSelectMode();
     } catch {
       setError("Failed to delete some bills. Please try again.");
@@ -95,6 +115,7 @@ export default function DashboardPage() {
     try {
       await deleteBill(billId);
       setBills((prev) => prev.filter((b) => b.id !== billId));
+      addToast("Bill deleted");
     } catch {
       setError("Failed to delete bill. Please try again.");
     } finally {
@@ -113,6 +134,24 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
+
+      {/* Email verification banner */}
+      {user && user.email_verified === false && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2.5 text-sm text-yellow-800 flex items-center justify-between gap-4">
+          <span>Please verify your email address to unlock all features.</span>
+          {resendSent ? (
+            <span className="text-xs text-green-600 font-medium shrink-0">Sent!</span>
+          ) : (
+            <button
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="text-xs text-yellow-700 underline hover:no-underline shrink-0 disabled:opacity-50"
+            >
+              {isResending ? "Sending..." : "Resend email"}
+            </button>
+          )}
+        </div>
+      )}
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">

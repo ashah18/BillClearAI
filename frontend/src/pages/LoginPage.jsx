@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.js";
 
 /**
@@ -11,11 +11,15 @@ const backendUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api")
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Message passed via navigation state (e.g. after password reset)
+  const successMessage = location.state?.message || "";
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -43,6 +47,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-blue-600">BillClear AI</h1>
           <p className="text-gray-500 text-sm mt-1">Sign in to your account</p>
         </div>
+
+        {successMessage && (
+          <div className="mb-4 bg-green-50 text-green-700 text-sm px-4 py-3 rounded-lg border border-green-200">
+            {successMessage}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg border border-red-200">
@@ -79,6 +89,11 @@ export default function LoginPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Your password"
             />
+            <div className="flex justify-end mt-1">
+              <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline">
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button

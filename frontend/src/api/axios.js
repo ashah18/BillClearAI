@@ -77,6 +77,8 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         setAccessToken(null);
+        // Signal the app that the session has fully expired so it can redirect to login
+        window.dispatchEvent(new CustomEvent("auth:session-expired"));
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

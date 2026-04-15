@@ -62,8 +62,9 @@ class UserSerializer(serializers.ModelSerializer):
             "insurance_provider",
             "plan_type",
             "language_pref",
+            "email_verified",
         ]
-        read_only_fields = ["id", "email"]
+        read_only_fields = ["id", "email", "email_verified"]
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -84,3 +85,24 @@ class ProfileSerializer(serializers.ModelSerializer):
             "plan_type",
             "language_pref",
         ]
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Serializer for changing a user's password (requires current password)."""
+
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Serializer for requesting a password reset email."""
+
+    email = serializers.EmailField()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Serializer for confirming a password reset with uid/token."""
+
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)

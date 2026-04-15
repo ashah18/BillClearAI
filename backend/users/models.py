@@ -37,6 +37,7 @@ class User(AbstractUser):
     insurance_provider = models.CharField(max_length=255, blank=True, default="")
     plan_type = models.CharField(max_length=255, blank=True, default="")
     language_pref = models.CharField(max_length=10, default="en")
+    email_verified = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

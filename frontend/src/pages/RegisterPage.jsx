@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.js";
 
 /**
@@ -10,13 +10,13 @@ const backendUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api")
 
 export default function RegisterPage() {
   const { register } = useAuth();
-  const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -31,7 +31,7 @@ export default function RegisterPage() {
 
     try {
       await register(email, password, password2);
-      navigate("/login");
+      setRegistered(true);
     } catch (err) {
       const data = err.response?.data;
       if (data) {
@@ -43,6 +43,27 @@ export default function RegisterPage() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
+          <h1 className="text-2xl font-bold text-blue-600 mb-6">BillClear AI</h1>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Account created!</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            We sent a verification link to <span className="font-medium text-gray-700">{email}</span>.
+            You can sign in now — verification just unlocks all features.
+          </p>
+          <Link
+            to="/login"
+            className="inline-block bg-blue-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            Go to sign in
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -46,6 +46,17 @@ function authReducer(state, action) {
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
+  // Listen for session-expiry events dispatched by the axios interceptor when
+  // both the access token and refresh token are expired/invalid.
+  useEffect(() => {
+    function handleSessionExpired() {
+      setAccessToken(null);
+      dispatch({ type: "LOGOUT" });
+    }
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
+  }, []);
+
   // On mount, attempt to restore session via refresh token cookie
   useEffect(() => {
     async function restoreSession() {

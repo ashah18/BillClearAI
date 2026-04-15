@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar.jsx";
 import { getProfile, updateProfile } from "../api/user.js";
+import { changePassword } from "../api/auth.js";
+import { setAccessToken } from "../api/axios.js";
+import { useToast } from "../context/ToastContext.jsx";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
@@ -24,6 +27,8 @@ const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent";
 
 export default function ProfilePage() {
+  const { addToast } = useToast();
+
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
@@ -39,8 +44,12 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
+  const [profileError, setProfileError] = useState("");
+
+  // Change-password form state
+  const [pwForm, setPwForm] = useState({ current_password: "", new_password: "", confirm_password: "" });
+  const [isSavingPw, setIsSavingPw] = useState(false);
+  const [pwError, setPwError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -60,7 +69,7 @@ export default function ProfilePage() {
           plan_type: data.plan_type || "",
         });
       } catch {
-        setError("Failed to load profile.");
+        setProfileError("Failed to load profile.");
       } finally {
         setIsLoading(false);
       }
@@ -75,16 +84,44 @@ export default function ProfilePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setIsSaving(true);
-    setError("");
-    setSuccess(false);
+    setProfileError("");
     try {
       await updateProfile(form);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      addToast("Profile saved successfully");
     } catch {
-      setError("Failed to save profile. Please try again.");
+      setProfileError("Failed to save profile. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPwError("");
+
+    if (pwForm.new_password !== pwForm.confirm_password) {
+      setPwError("New passwords do not match.");
+      return;
+    }
+
+    setIsSavingPw(true);
+    try {
+      const data = await changePassword(pwForm.current_password, pwForm.new_password);
+      // Server returns a new access token — update the in-memory token
+      if (data.access) {
+        setAccessToken(data.access);
+      }
+      setPwForm({ current_password: "", new_password: "", confirm_password: "" });
+      addToast("Password updated");
+    } catch (err) {
+      const msg =
+        err.response?.data?.current_password?.[0] ||
+        err.response?.data?.new_password?.[0] ||
+        err.response?.data?.detail ||
+        "Failed to change password. Please try again.";
+      setPwError(msg);
+    } finally {
+      setIsSavingPw(false);
     }
   }
 
@@ -108,14 +145,9 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {error && (
+        {profileError && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-            Profile saved successfully.
+            {profileError}
           </div>
         )}
 
@@ -193,18 +225,16 @@ export default function ProfilePage() {
               />
             </Field>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <Field label="City">
-                  <input
-                    type="text"
-                    name="city"
-                    value={form.city}
-                    onChange={handleChange}
-                    className={inputClass}
-                    placeholder="Springfield"
-                  />
-                </Field>
-              </div>
+              <Field label="City">
+                <input
+                  type="text"
+                  name="city"
+                  value={form.city}
+                  onChange={handleChange}
+                  className={inputClass}
+                  placeholder="Springfield"
+                />
+              </Field>
               <Field label="State">
                 <select
                   name="state"
@@ -265,6 +295,61 @@ export default function ProfilePage() {
             >
               {isSaving ? "Saving…" : "Save Profile"}
             </button>
+          </div>
+        </form>
+
+        {/* Change Password — separate form */}
+        <form onSubmit={handleChangePassword} className="mt-6">
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
+            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Change Password</h2>
+
+            {pwError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {pwError}
+              </div>
+            )}
+
+            <Field label="Current Password">
+              <input
+                type="password"
+                value={pwForm.current_password}
+                onChange={(e) => setPwForm((p) => ({ ...p, current_password: e.target.value }))}
+                className={inputClass}
+                placeholder="Your current password"
+                autoComplete="current-password"
+              />
+            </Field>
+            <Field label="New Password">
+              <input
+                type="password"
+                value={pwForm.new_password}
+                onChange={(e) => setPwForm((p) => ({ ...p, new_password: e.target.value }))}
+                className={inputClass}
+                placeholder="At least 8 characters"
+                minLength={8}
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field label="Confirm New Password">
+              <input
+                type="password"
+                value={pwForm.confirm_password}
+                onChange={(e) => setPwForm((p) => ({ ...p, confirm_password: e.target.value }))}
+                className={inputClass}
+                placeholder="Repeat your new password"
+                autoComplete="new-password"
+              />
+            </Field>
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isSavingPw}
+                className="w-full sm:w-auto bg-gray-800 text-white text-sm font-medium px-6 py-2.5 rounded-lg hover:bg-gray-900 disabled:opacity-60 transition-colors"
+              >
+                {isSavingPw ? "Updating…" : "Update Password"}
+              </button>
+            </div>
           </div>
         </form>
       </main>

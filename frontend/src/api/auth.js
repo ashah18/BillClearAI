@@ -41,3 +41,37 @@ export async function getProfile() {
   const response = await api.get("/user/profile/");
   return response.data;
 }
+
+/**
+ * Request a password reset email for the given address.
+ * Never reveals whether the email exists.
+ */
+export async function requestPasswordReset(email) {
+  const response = await api.post("/auth/password-reset/", { email });
+  return response.data;
+}
+
+/**
+ * Confirm a password reset using the uid/token from the reset link.
+ */
+export async function confirmPasswordReset(uid, token, new_password) {
+  const response = await api.post("/auth/password-reset/confirm/", { uid, token, new_password });
+  return response.data;
+}
+
+/**
+ * Change the current user's password (requires current password for verification).
+ * Returns a fresh access token to keep the session alive.
+ */
+export async function changePassword(current_password, new_password) {
+  const response = await api.post("/auth/change-password/", { current_password, new_password });
+  return response.data;
+}
+
+/**
+ * Resend the email verification link to the current user.
+ */
+export async function resendVerification() {
+  const response = await api.post("/auth/resend-verification/");
+  return response.data;
+}

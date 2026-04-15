@@ -7,6 +7,7 @@ import { getDispute, updateDispute } from "../api/bills.js";
 import Navbar from "../components/Navbar.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
+import { useToast } from "../context/ToastContext.jsx";
 
 const STATUS_STYLES = {
   draft: "bg-gray-100 text-gray-600",
@@ -22,6 +23,7 @@ const STATUS_STYLES = {
  */
 export default function DisputePage() {
   const { id, disputeId } = useParams();
+  const { addToast } = useToast();
 
   const [dispute, setDispute] = useState(null);
   const [error, setError] = useState("");
@@ -51,6 +53,8 @@ export default function DisputePage() {
     try {
       const updated = await updateDispute(id, disputeId, { status: newStatus, ...extraPayload });
       setDispute(updated);
+      if (newStatus === "sent") addToast("Dispute marked as sent");
+      else if (newStatus === "denied") addToast("Dispute marked as denied");
     } catch {
       // update failed silently — status badge will remain unchanged
     } finally {
@@ -64,6 +68,7 @@ export default function DisputePage() {
       payload.savings_amount = savingsInput.trim();
     }
     await handleUpdateStatus("resolved", payload);
+    addToast("Dispute marked as resolved");
     setShowResolveForm(false);
     setSavingsInput("");
   }
