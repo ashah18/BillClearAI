@@ -228,7 +228,7 @@ export default function DisputePage() {
               return (
                 <div
                   key={item.id}
-                  className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4"
+                  className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex flex-wrap items-start justify-between gap-3"
                 >
                   <div className="flex-1 min-w-0">
                     {code && (
@@ -311,7 +311,7 @@ export default function DisputePage() {
               className="bg-white mx-auto shadow-md"
               style={{
                 maxWidth: "680px",
-                padding: "72px 80px",
+                padding: "24px 20px",
                 fontFamily: "'Georgia', 'Times New Roman', serif",
                 fontSize: "14px",
                 lineHeight: "1.7",

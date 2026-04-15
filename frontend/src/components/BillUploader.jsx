@@ -59,13 +59,15 @@ export default function BillUploader({ onFileSelect, selectedFile }) {
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        className={`relative border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors
+        className={`relative border-2 border-dashed rounded-xl p-8 sm:p-10 text-center cursor-pointer transition-colors
           ${isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50"}`}
       >
+        {/* capture="environment" opens the rear camera on mobile; ignored on desktop */}
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED_EXTENSIONS.join(",")}
+          accept="image/*,.pdf"
+          capture="environment"
           onChange={handleInputChange}
           className="hidden"
         />
@@ -74,7 +76,7 @@ export default function BillUploader({ onFileSelect, selectedFile }) {
           <div>
             <p className="text-green-600 font-semibold text-sm">{selectedFile.name}</p>
             <p className="text-gray-400 text-xs mt-1">
-              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB — Click to change
+              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB — Tap to change
             </p>
           </div>
         ) : (
@@ -84,7 +86,12 @@ export default function BillUploader({ onFileSelect, selectedFile }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
             </div>
-            <p className="text-sm font-medium text-gray-700">
+            {/* Mobile: camera-first prompt */}
+            <p className="sm:hidden text-sm font-medium text-gray-700">
+              Tap to take a photo of your bill
+            </p>
+            {/* Desktop: drag-and-drop prompt */}
+            <p className="hidden sm:block text-sm font-medium text-gray-700">
               Drag and drop your bill here, or <span className="text-blue-600">browse</span>
             </p>
             <p className="text-xs text-gray-400 mt-1">Supports PDF, JPG, PNG — up to 20 MB</p>

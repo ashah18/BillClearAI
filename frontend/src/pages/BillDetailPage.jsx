@@ -243,7 +243,7 @@ export default function BillDetailPage() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-28 sm:pb-8 space-y-8">
         {error && (
           <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200 text-sm">
             {error}
@@ -514,7 +514,7 @@ export default function BillDetailPage() {
         </div>
 
         {/* Chat interface */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
           <div className="px-6 py-4 border-b border-gray-100">
             <h2 className="text-lg font-semibold text-gray-900">Ask about this bill</h2>
             <p className="text-sm text-gray-500">Get plain-English explanations from AI</p>
@@ -571,7 +571,7 @@ export default function BillDetailPage() {
 
           <form
             onSubmit={handleSendMessage}
-            className="px-4 py-4 border-t border-gray-100 flex gap-3"
+            className="px-4 py-3 border-t border-gray-200 flex gap-3 bg-white fixed bottom-0 left-0 right-0 z-20 sm:static sm:z-auto sm:py-4 sm:border-gray-100"
           >
             <input
               type="text"

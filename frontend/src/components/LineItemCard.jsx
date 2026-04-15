@@ -76,52 +76,58 @@ export default function LineItemCard({ item, selectable = false, selected = fals
         <button
           type="button"
           onClick={() => setExpanded((prev) => !prev)}
-          className="flex-1 min-w-0 text-left flex items-start justify-between gap-4"
+          className="flex-1 min-w-0 text-left flex items-start gap-2"
         >
-        <div className="flex-1 min-w-0">
-          {code && (
-            <span className="inline-block bg-gray-100 text-gray-700 text-xs font-mono px-2 py-0.5 rounded mb-1">
-              {code}
-            </span>
-          )}
-          <p className="text-sm text-gray-900 font-medium leading-snug">
-            {description_plain || description_raw || "No description available"}
-          </p>
-          {error_type && ERROR_LABELS[error_type] && (
-            <p className="mt-1 text-xs text-red-600 font-medium">{ERROR_LABELS[error_type]}</p>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <span className={`text-base font-semibold ${isCredit ? "text-gray-500" : "text-gray-900"}`}>
-            {formatCurrency(charged_amount)}
-          </span>
-          {isCredit && (
-            <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
-              Credit / Payment
-            </span>
-          )}
-          {isLowConfidence && (
-            <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
-              low confidence — verify
-            </span>
-          )}
-          {!isCredit && <RiskBadge risk_level={risk_level} />}
-          {disputed && (
-            <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
-              In Dispute
-            </span>
-          )}
-        </div>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className={`h-4 w-4 text-gray-400 shrink-0 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+          {/* Column-on-mobile, row-on-desktop */}
+          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            {/* Description */}
+            <div className="flex-1 min-w-0">
+              {code && (
+                <span className="inline-block bg-gray-100 text-gray-700 text-xs font-mono px-2 py-0.5 rounded mb-1">
+                  {code}
+                </span>
+              )}
+              <p className="text-sm text-gray-900 font-medium leading-snug">
+                {description_plain || description_raw || "No description available"}
+              </p>
+              {error_type && ERROR_LABELS[error_type] && (
+                <p className="mt-1 text-xs text-red-600 font-medium">{ERROR_LABELS[error_type]}</p>
+              )}
+            </div>
+            {/* Price + badges — row below description on mobile, column on right on desktop */}
+            <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 sm:gap-1 mt-1.5 sm:mt-0 shrink-0 flex-wrap">
+              <span className={`text-base font-semibold ${isCredit ? "text-gray-500" : "text-gray-900"}`}>
+                {formatCurrency(charged_amount)}
+              </span>
+              {isCredit && (
+                <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                  Credit / Payment
+                </span>
+              )}
+              {isLowConfidence && (
+                <span className="text-xs bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                  low confidence — verify
+                </span>
+              )}
+              {!isCredit && <RiskBadge risk_level={risk_level} />}
+              {disputed && (
+                <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+                  In Dispute
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Chevron */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className={`h-4 w-4 text-gray-400 shrink-0 mt-1 transition-transform ${expanded ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
         </button>
       </div>
 

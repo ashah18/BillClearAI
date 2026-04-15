@@ -262,9 +262,9 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Right side */}
-                  <div className="flex items-center gap-4 shrink-0">
+                  <div className="flex items-center gap-2 sm:gap-4 shrink-0">
                     <div className="text-right">
-                      <p className="text-lg font-bold text-gray-900">
+                      <p className="text-base sm:text-lg font-bold text-gray-900">
                         {bill.total_charged != null
                           ? formatCurrency(bill.total_charged)
                           : formatCurrency(

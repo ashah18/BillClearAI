@@ -136,7 +136,7 @@ export default function ProfilePage() {
           {/* Personal info */}
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
             <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Personal Information</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="First Name">
                 <input
                   type="text"
@@ -192,8 +192,8 @@ export default function ProfilePage() {
                 placeholder="123 Main St"
               />
             </Field>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-1">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
                 <Field label="City">
                   <input
                     type="text"
@@ -261,7 +261,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={isSaving}
-              className="bg-blue-600 text-white text-sm font-medium px-6 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
+              className="w-full sm:w-auto bg-blue-600 text-white text-sm font-medium px-6 py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors"
             >
               {isSaving ? "Saving…" : "Save Profile"}
             </button>
