@@ -39,6 +39,11 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "django.contrib.sites",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
     # Local apps
     "users",
     "bills",
@@ -53,6 +58,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -143,3 +149,40 @@ CORS_ALLOW_CREDENTIALS = True
 
 # Anthropic API key
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+
+# Django Sites framework (required by allauth)
+SITE_ID = 1
+
+# Authentication backends (ModelBackend for email/password, allauth for OAuth)
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# django-allauth configuration (allauth 65.x API)
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
+ACCOUNT_USER_MODEL_USERNAME_FIELD = None  # Custom User model has no username field
+ACCOUNT_EMAIL_VERIFICATION = "none"  # Google already verified the email
+SOCIALACCOUNT_AUTO_SIGNUP = True
+# If a Google email matches an existing email/password account, connect them
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
+# After allauth session login, redirect to our JWT-issuance bridge endpoint
+LOGIN_REDIRECT_URL = "/api/auth/google/jwt/"
+
+# Google OAuth app (inline config — no SocialApp DB record needed)
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APP": {
+            "client_id": env("GOOGLE_CLIENT_ID", default=""),
+            "secret": env("GOOGLE_CLIENT_SECRET", default=""),
+            "key": "",
+        },
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    }
+}
+
+# Frontend URL used for OAuth redirects
+FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")

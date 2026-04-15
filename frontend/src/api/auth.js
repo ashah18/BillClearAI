@@ -32,3 +32,12 @@ export async function refreshToken() {
   const response = await api.post("/auth/refresh/");
   return response.data;
 }
+
+/**
+ * Fetch the authenticated user's profile data.
+ * Used by loginWithToken after OAuth to get user details.
+ */
+export async function getProfile() {
+  const response = await api.get("/user/profile/");
+  return response.data;
+}

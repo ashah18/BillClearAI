@@ -1,5 +1,5 @@
 import React, { createContext, useReducer, useEffect } from "react";
-import { login as apiLogin, logout as apiLogout, register as apiRegister, refreshToken } from "../api/auth.js";
+import { login as apiLogin, logout as apiLogout, register as apiRegister, refreshToken, getProfile } from "../api/auth.js";
 import { setAccessToken } from "../api/axios.js";
 
 export const AuthContext = createContext(null);
@@ -84,6 +84,17 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  async function loginWithToken(token) {
+    setAccessToken(token);
+    try {
+      const userData = await getProfile();
+      dispatch({ type: "LOGIN", payload: { user: userData } });
+    } catch {
+      setAccessToken(null);
+      throw new Error("OAuth login failed — could not fetch profile.");
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -93,6 +104,7 @@ export function AuthProvider({ children }) {
         login,
         logout,
         register,
+        loginWithToken,
       }}
     >
       {children}

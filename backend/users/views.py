@@ -1,4 +1,7 @@
 from django.conf import settings
+from django.contrib.auth import logout as auth_logout
+from django.http import HttpResponseRedirect
+from django.views import View
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -135,6 +138,44 @@ class ProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(UserSerializer(request.user).data)
+
+
+class GoogleJWTView(View):
+    """
+    Bridge between allauth's session-based Google OAuth login and our SimpleJWT system.
+
+    allauth redirects here (via LOGIN_REDIRECT_URL) after completing the Google OAuth
+    dance and session-authenticating the user. We issue SimpleJWT tokens, clear the
+    allauth session, set the refresh token as an httpOnly cookie, and redirect to the
+    frontend OAuth callback page with the access token in the URL.
+    """
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return HttpResponseRedirect(
+                f"{settings.FRONTEND_URL}/login?error=oauth_failed"
+            )
+
+        user = request.user
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+
+        # Clear allauth's session — we only want JWT auth going forward
+        auth_logout(request)
+
+        response = HttpResponseRedirect(
+            f"{settings.FRONTEND_URL}/oauth/callback?access_token={access_token}"
+        )
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite="Lax",
+            max_age=7 * 24 * 60 * 60,
+        )
+        return response
 
 
 class UserSavingsView(APIView):

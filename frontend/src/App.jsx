@@ -4,6 +4,7 @@ import { useAuth } from "./hooks/useAuth.js";
 
 import LoginPage from "./pages/LoginPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import UploadPage from "./pages/UploadPage.jsx";
 import BillDetailPage from "./pages/BillDetailPage.jsx";
@@ -91,6 +92,8 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+      {/* OAuth callback — no auth guard, user arrives unauthenticated and logs in here */}
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
 
       {/* Protected routes */}
       <Route
