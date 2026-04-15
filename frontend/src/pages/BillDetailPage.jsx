@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { saveAs } from "file-saver";
@@ -9,6 +9,7 @@ import {
   getChatHistory,
   sendChatMessage,
   createDispute,
+  updateDispute,
   analyzeBill,
   deleteBill,
 } from "../api/bills.js";
@@ -47,8 +48,18 @@ export default function BillDetailPage() {
   const [disputeMode, setDisputeMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [downloadingDisputeId, setDownloadingDisputeId] = useState(null);
+  const [updatingDisputeId, setUpdatingDisputeId] = useState(null);
+  const [resolvingDisputeId, setResolvingDisputeId] = useState(null);
+  const [savingsInput, setSavingsInput] = useState("");
 
   const chatBottomRef = useRef(null);
+
+  // IDs of every line item that appears in at least one dispute (any status)
+  const disputedItemIds = useMemo(() => {
+    const ids = new Set();
+    disputes.forEach((d) => (d.line_items || []).forEach((li) => ids.add(li.id)));
+    return ids;
+  }, [disputes]);
 
   useEffect(() => {
     async function load() {
@@ -124,6 +135,28 @@ export default function BillDetailPage() {
     } finally {
       setDownloadingDisputeId(null);
     }
+  }
+
+  async function handleUpdateDispute(disputeId, payload) {
+    setUpdatingDisputeId(disputeId);
+    try {
+      const updated = await updateDispute(id, disputeId, payload);
+      setDisputes((prev) => prev.map((d) => (d.id === disputeId ? updated : d)));
+    } catch {
+      setError("Failed to update dispute. Please try again.");
+    } finally {
+      setUpdatingDisputeId(null);
+    }
+  }
+
+  async function handleResolveDispute(disputeId) {
+    const payload = { status: "resolved" };
+    if (savingsInput.trim() !== "") {
+      payload.savings_amount = savingsInput.trim();
+    }
+    await handleUpdateDispute(disputeId, payload);
+    setResolvingDisputeId(null);
+    setSavingsInput("");
   }
 
   async function handleSendMessage(e) {
@@ -234,10 +267,12 @@ export default function BillDetailPage() {
           </div>
 
           {(() => {
-            const lineItemTotal = (bill.line_items || []).reduce(
-              (sum, i) => sum + parseFloat(i.charged_amount || 0),
-              0
-            );
+            // Negative line items (credits, payments) are shown as line items
+            // but excluded from fallback totals — only count positive charges.
+            const lineItemTotal = (bill.line_items || []).reduce((sum, i) => {
+              const amt = parseFloat(i.charged_amount || 0);
+              return sum + (amt > 0 ? amt : 0);
+            }, 0);
             const totalCharged = bill.total_charged ?? lineItemTotal;
             const totalResponsibility = bill.patient_responsibility ?? lineItemTotal;
             const hasAllowed = bill.total_allowed != null;
@@ -261,16 +296,36 @@ export default function BillDetailPage() {
           })()}
 
           {/* Potential savings banner */}
-          {bill.potential_savings > 0 && bill.status !== "failed" && (
-            <div className="mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
-              <p className="text-sm font-semibold text-green-700">
-                Up to {formatCurrency(bill.potential_savings)} in potential savings identified
-              </p>
-              <p className="text-xs text-green-600 mt-0.5">
-                Based on pricing data and billing error analysis — dispute flagged charges to recover this amount
-              </p>
-            </div>
-          )}
+          {(() => {
+            const confirmedSavings = disputes.reduce((sum, d) => {
+              if (d.status === "resolved" && d.savings_amount != null) {
+                return sum + parseFloat(d.savings_amount);
+              }
+              return sum;
+            }, 0);
+            const hasPotential = bill.potential_savings > 0 && bill.status !== "failed";
+            const hasConfirmed = confirmedSavings > 0;
+            if (!hasPotential && !hasConfirmed) return null;
+            return (
+              <div className="mt-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
+                {hasPotential && (
+                  <>
+                    <p className="text-sm font-semibold text-green-700">
+                      Up to {formatCurrency(bill.potential_savings)} in potential savings identified
+                    </p>
+                    <p className="text-xs text-green-600 mt-0.5">
+                      Based on pricing data and billing error analysis — dispute flagged charges to recover this amount
+                    </p>
+                  </>
+                )}
+                {hasConfirmed && (
+                  <p className={`text-sm font-semibold text-green-700 ${hasPotential ? "mt-2 pt-2 border-t border-green-200" : ""}`}>
+                    {formatCurrency(confirmedSavings)} confirmed savings recovered
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Failed parse — hard error */}
           {bill.status === "failed" && (
@@ -324,29 +379,100 @@ export default function BillDetailPage() {
               {disputes.map((d) => (
                 <div
                   key={d.id}
-                  className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-5 py-3.5 hover:shadow-sm transition-shadow"
+                  className="bg-white border border-gray-200 rounded-xl px-5 py-3.5 hover:shadow-sm transition-shadow"
                 >
-                  <Link to={`/bills/${id}/disputes/${d.id}`} className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">
-                      Dispute #{d.id} &mdash; {d.line_items.length} charge{d.line_items.length !== 1 ? "s" : ""}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{formatDate(d.created_at)}</p>
-                  </Link>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${DISPUTE_STATUS_STYLES[d.status] || "bg-gray-100 text-gray-600"}`}>
-                      {d.status}
-                    </span>
-                    <button
-                      onClick={() => handleDownloadDispute(d.id)}
-                      disabled={downloadingDisputeId === d.id || !d.letter_pdf}
-                      className="flex items-center gap-1 text-xs text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
-                      {downloadingDisputeId === d.id ? "Preparing…" : "Download"}
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <Link to={`/bills/${id}/disputes/${d.id}`} className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        Dispute #{d.id} &mdash; {d.line_items.length} charge{d.line_items.length !== 1 ? "s" : ""}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatDate(d.created_at)}
+                        {d.status === "resolved" && d.savings_amount != null && (
+                          <span className="ml-2 text-green-600 font-medium">
+                            {formatCurrency(d.savings_amount)} confirmed
+                          </span>
+                        )}
+                      </p>
+                    </Link>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${DISPUTE_STATUS_STYLES[d.status] || "bg-gray-100 text-gray-600"}`}>
+                        {d.status}
+                      </span>
+                      <button
+                        onClick={() => handleDownloadDispute(d.id)}
+                        disabled={downloadingDisputeId === d.id || !d.letter_pdf}
+                        className="flex items-center gap-1 text-xs text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        {downloadingDisputeId === d.id ? "Preparing…" : "Download"}
+                      </button>
+                      {/* Status action buttons */}
+                      {d.status === "draft" && d.letter_pdf && (
+                        <button
+                          onClick={() => handleUpdateDispute(d.id, { status: "sent" })}
+                          disabled={updatingDisputeId === d.id}
+                          className="text-xs text-gray-700 border border-gray-300 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        >
+                          {updatingDisputeId === d.id ? "Saving…" : "Mark as Sent"}
+                        </button>
+                      )}
+                      {d.status === "sent" && (
+                        <>
+                          <button
+                            onClick={() => { setResolvingDisputeId(d.id); setSavingsInput(""); }}
+                            disabled={updatingDisputeId === d.id}
+                            className="text-xs text-green-700 border border-green-300 px-2.5 py-1.5 rounded-lg hover:bg-green-50 disabled:opacity-50 transition-colors"
+                          >
+                            Mark as Resolved
+                          </button>
+                          <button
+                            onClick={() => handleUpdateDispute(d.id, { status: "denied" })}
+                            disabled={updatingDisputeId === d.id}
+                            className="text-xs text-red-600 border border-red-200 px-2.5 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {updatingDisputeId === d.id ? "Saving…" : "Mark as Denied"}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Inline resolve form */}
+                  {resolvingDisputeId === d.id && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-3">
+                      <label className="text-xs text-gray-600 shrink-0">
+                        Amount credited back (optional):
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={savingsInput}
+                          onChange={(e) => setSavingsInput(e.target.value)}
+                          placeholder="0.00"
+                          className="pl-5 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs w-28 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleResolveDispute(d.id)}
+                        disabled={updatingDisputeId === d.id}
+                        className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                      >
+                        {updatingDisputeId === d.id ? "Saving…" : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => { setResolvingDisputeId(null); setSavingsInput(""); }}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -377,6 +503,7 @@ export default function BillDetailPage() {
                     selectable={isSelectable}
                     selected={selectedIds.has(item.id)}
                     onToggle={toggleItemSelection}
+                    disputed={disputedItemIds.has(item.id)}
                   />
                 );
               })}

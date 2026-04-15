@@ -30,6 +30,7 @@ class BillSerializer(serializers.ModelSerializer):
 
     line_items = LineItemSerializer(many=True, read_only=True)
     potential_savings = serializers.SerializerMethodField()
+    confirmed_savings = serializers.SerializerMethodField()
 
     class Meta:
         model = Bill
@@ -49,12 +50,38 @@ class BillSerializer(serializers.ModelSerializer):
             "created_at",
             "line_items",
             "potential_savings",
+            "confirmed_savings",
         ]
         read_only_fields = ["id", "created_at", "original_file"]
 
     def get_potential_savings(self, obj):
         from .services import calculate_bill_savings
-        return calculate_bill_savings(obj.line_items.all())
+        from disputes.models import Dispute
+
+        resolved_denied = Dispute.objects.filter(bill=obj, status__in=["resolved", "denied"])
+
+        # Exclude handled line items from the remaining actionable savings calculation.
+        handled_ids = set(resolved_denied.values_list("line_items__id", flat=True))
+        handled_ids.discard(None)
+        eligible = [item for item in obj.line_items.all() if item.id not in handled_ids]
+
+        # Add confirmed savings back so potential savings reflects all identified
+        # savings — both already recovered and still actionable.
+        confirmed = sum(
+            float(d.savings_amount)
+            for d in resolved_denied.filter(status="resolved")
+            if d.savings_amount is not None
+        )
+        return round(calculate_bill_savings(eligible) + confirmed, 2)
+
+    def get_confirmed_savings(self, obj):
+        from disputes.models import Dispute
+
+        resolved = Dispute.objects.filter(bill=obj, status="resolved")
+        total = sum(
+            float(d.savings_amount) for d in resolved if d.savings_amount is not None
+        )
+        return round(total, 2)
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):

@@ -16,7 +16,7 @@ const ERROR_LABELS = {
  *
  * When selectable=true, a checkbox appears and onToggle is called on click.
  */
-export default function LineItemCard({ item, selectable = false, selected = false, onToggle }) {
+export default function LineItemCard({ item, selectable = false, selected = false, onToggle, disputed = false }) {
   const [expanded, setExpanded] = useState(false);
 
   const {
@@ -106,6 +106,11 @@ export default function LineItemCard({ item, selectable = false, selected = fals
             </span>
           )}
           {!isCredit && <RiskBadge risk_level={risk_level} />}
+          {disputed && (
+            <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded font-medium whitespace-nowrap">
+              In Dispute
+            </span>
+          )}
         </div>
         <svg
           xmlns="http://www.w3.org/2000/svg"

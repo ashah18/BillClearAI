@@ -254,6 +254,11 @@ export default function DashboardPage() {
                         Up to {formatCurrency(bill.potential_savings)} in potential savings
                       </p>
                     )}
+                    {bill.confirmed_savings > 0 && (
+                      <p className="text-xs text-green-500 font-medium mt-0.5">
+                        {formatCurrency(bill.confirmed_savings)} confirmed
+                      </p>
+                    )}
                   </div>
 
                   {/* Right side */}
@@ -263,10 +268,10 @@ export default function DashboardPage() {
                         {bill.total_charged != null
                           ? formatCurrency(bill.total_charged)
                           : formatCurrency(
-                              (bill.line_items || []).reduce(
-                                (sum, i) => sum + parseFloat(i.charged_amount || 0),
-                                0
-                              )
+                              (bill.line_items || []).reduce((sum, i) => {
+                                const amt = parseFloat(i.charged_amount || 0);
+                                return sum + (amt > 0 ? amt : 0);
+                              }, 0)
                             )}
                       </p>
                       <p className="text-xs text-gray-400">Total Charged</p>

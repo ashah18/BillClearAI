@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { saveAs } from "file-saver";
 import api from "../api/axios.js";
-import { getDispute } from "../api/bills.js";
+import { getDispute, updateDispute } from "../api/bills.js";
 import Navbar from "../components/Navbar.jsx";
 import RiskBadge from "../components/RiskBadge.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
@@ -28,6 +28,9 @@ export default function DisputePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showResolveForm, setShowResolveForm] = useState(false);
+  const [savingsInput, setSavingsInput] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -42,6 +45,28 @@ export default function DisputePage() {
     }
     load();
   }, [id, disputeId]);
+
+  async function handleUpdateStatus(newStatus, extraPayload = {}) {
+    setIsUpdating(true);
+    try {
+      const updated = await updateDispute(id, disputeId, { status: newStatus, ...extraPayload });
+      setDispute(updated);
+    } catch {
+      // update failed silently — status badge will remain unchanged
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
+  async function handleResolve() {
+    const payload = {};
+    if (savingsInput.trim() !== "") {
+      payload.savings_amount = savingsInput.trim();
+    }
+    await handleUpdateStatus("resolved", payload);
+    setShowResolveForm(false);
+    setSavingsInput("");
+  }
 
   async function handleCopy() {
     try {
@@ -111,15 +136,85 @@ export default function DisputePage() {
 
         {/* Header */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900">Dispute #{dispute.id}</h1>
-              <p className="text-sm text-gray-500 mt-0.5">Created {formatDate(dispute.created_at)}</p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Created {formatDate(dispute.created_at)}
+                {dispute.status === "resolved" && dispute.savings_amount != null && (
+                  <span className="ml-2 text-green-600 font-medium">
+                    · {formatCurrency(dispute.savings_amount)} confirmed savings
+                  </span>
+                )}
+              </p>
             </div>
-            <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[dispute.status] || "bg-gray-100 text-gray-600"}`}>
-              {dispute.status}
-            </span>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+              <span className={`capitalize text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[dispute.status] || "bg-gray-100 text-gray-600"}`}>
+                {dispute.status}
+              </span>
+              {dispute.status === "draft" && dispute.letter_pdf && (
+                <button
+                  onClick={() => handleUpdateStatus("sent")}
+                  disabled={isUpdating}
+                  className="text-xs text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  {isUpdating ? "Saving…" : "Mark as Sent"}
+                </button>
+              )}
+              {dispute.status === "sent" && (
+                <>
+                  <button
+                    onClick={() => { setShowResolveForm(true); setSavingsInput(""); }}
+                    disabled={isUpdating}
+                    className="text-xs text-green-700 border border-green-300 px-3 py-1.5 rounded-lg hover:bg-green-50 disabled:opacity-50 transition-colors"
+                  >
+                    Mark as Resolved
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus("denied")}
+                    disabled={isUpdating}
+                    className="text-xs text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                  >
+                    {isUpdating ? "Saving…" : "Mark as Denied"}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+
+          {/* Inline resolve form */}
+          {showResolveForm && (
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3 flex-wrap">
+              <label className="text-xs text-gray-600 shrink-0">
+                Amount credited back (optional):
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={savingsInput}
+                  onChange={(e) => setSavingsInput(e.target.value)}
+                  placeholder="0.00"
+                  className="pl-5 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs w-28 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <button
+                onClick={handleResolve}
+                disabled={isUpdating}
+                className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {isUpdating ? "Saving…" : "Confirm"}
+              </button>
+              <button
+                onClick={() => { setShowResolveForm(false); setSavingsInput(""); }}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Disputed charges */}

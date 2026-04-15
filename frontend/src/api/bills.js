@@ -69,6 +69,17 @@ export async function getDispute(id, disputeId) {
 }
 
 /**
+ * Update dispute status and/or savings_amount.
+ * @param {number} billId - Bill ID.
+ * @param {number} disputeId - Dispute ID.
+ * @param {{ status?: string, savings_amount?: string }} data
+ */
+export async function updateDispute(billId, disputeId, data) {
+  const response = await api.patch(`/bills/${billId}/dispute/${disputeId}/`, data);
+  return response.data;
+}
+
+/**
  * Send a chat message about a specific bill.
  * @param {number} id - Bill ID.
  * @param {string} message - User's message text.

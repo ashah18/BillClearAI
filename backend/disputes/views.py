@@ -1,5 +1,6 @@
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -23,7 +24,7 @@ class DisputeListView(APIView):
 
 
 class DisputeDetailView(APIView):
-    """Retrieve the detail of a specific dispute for a bill."""
+    """Retrieve or update a specific dispute for a bill."""
 
     permission_classes = [IsAuthenticated]
 
@@ -35,6 +36,35 @@ class DisputeDetailView(APIView):
             bill__user=request.user,
         )
         serializer = DisputeSerializer(dispute)
+        return Response(serializer.data)
+
+    def patch(self, request, pk, dispute_id):
+        dispute = get_object_or_404(
+            Dispute,
+            pk=dispute_id,
+            bill__pk=pk,
+            bill__user=request.user,
+        )
+        data = request.data.copy()
+        new_status = data.get("status")
+
+        # Auto-set timestamps on status transitions
+        if new_status == "sent" and dispute.status != "sent":
+            data["sent_at"] = timezone.now().isoformat()
+        if new_status == "resolved" and dispute.status != "resolved":
+            data["resolved_at"] = timezone.now().isoformat()
+
+        serializer = DisputeSerializer(dispute, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        # When all disputes for this bill are resolved, mark the bill resolved too
+        if new_status == "resolved":
+            bill = dispute.bill
+            if not bill.disputes.exclude(status="resolved").exists():
+                bill.status = "resolved"
+                bill.save(update_fields=["status"])
+
         return Response(serializer.data)
 
 
