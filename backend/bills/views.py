@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -11,9 +12,15 @@ from disputes.models import Dispute
 from disputes.serializers import DisputeSerializer
 from .models import Bill, ChatMessage, LineItem
 from .serializers import BillSerializer, ChatMessageSerializer
+from .throttles import BillUploadThrottle, ChatThrottle, DisputeThrottle, ReanalyzeThrottle
 from . import services
 
 logger = logging.getLogger(__name__)
+
+# File upload constraints
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "application/pdf"}
 
 
 class BillListView(APIView):
@@ -31,12 +38,35 @@ class BillUploadView(APIView):
     """Upload a new bill file and trigger AI parsing pipeline."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [BillUploadThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
         file = request.FILES.get("file")
         if not file:
             return Response({"detail": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate file size
+        if file.size > _MAX_UPLOAD_BYTES:
+            return Response(
+                {"detail": "File too large. Maximum allowed size is 10 MB."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate file extension
+        ext = os.path.splitext(file.name)[1].lower()
+        if ext not in _ALLOWED_EXTENSIONS:
+            return Response(
+                {"detail": "Unsupported file type. Please upload a JPG, PNG, or PDF."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate MIME type reported by the client
+        if file.content_type not in _ALLOWED_CONTENT_TYPES:
+            return Response(
+                {"detail": "Unsupported file type. Please upload a JPG, PNG, or PDF."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         bill = Bill.objects.create(user=request.user, original_file=file)
 
@@ -96,6 +126,7 @@ class BillAnalyzeView(APIView):
     """Re-run AI analysis on an existing bill's line items."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ReanalyzeThrottle]
 
     def post(self, request, pk):
         bill = get_object_or_404(Bill, pk=pk, user=request.user)
@@ -116,6 +147,7 @@ class BillDisputeView(APIView):
     """Generate a dispute letter for flagged line items on a bill."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [DisputeThrottle]
 
     def post(self, request, pk):
         bill = get_object_or_404(Bill, pk=pk, user=request.user)
@@ -155,6 +187,7 @@ class ChatView(APIView):
     """Send and receive chat messages about a bill."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ChatThrottle]
 
     def get(self, request, pk):
         """Return the full chat history for a bill."""

@@ -16,6 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from bills.models import Bill
 from .models import User
+from .throttles import LoginRateThrottle, PasswordResetThrottle, RegisterRateThrottle
 from .serializers import (
     ChangePasswordSerializer,
     LoginSerializer,
@@ -31,6 +32,7 @@ class RegisterView(APIView):
     """Public endpoint to create a new user account."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [RegisterRateThrottle]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -61,6 +63,7 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -324,6 +327,7 @@ class PasswordResetRequestView(APIView):
     """Request a password reset email. Never reveals whether the email exists."""
 
     permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetThrottle]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)

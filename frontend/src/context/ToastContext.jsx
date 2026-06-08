@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 export const ToastContext = createContext(null);
 
@@ -32,6 +32,15 @@ export function ToastProvider({ children }) {
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
   }, []);
+
+  // Listen for rate-limit events dispatched by the axios interceptor
+  useEffect(() => {
+    function handleRateLimit(e) {
+      addToast(e.detail?.message || "Too many requests. Please try again later.", "error");
+    }
+    window.addEventListener("rate-limit", handleRateLimit);
+    return () => window.removeEventListener("rate-limit", handleRateLimit);
+  }, [addToast]);
 
   return (
     <ToastContext.Provider value={{ addToast }}>

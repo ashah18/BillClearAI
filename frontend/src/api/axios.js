@@ -85,6 +85,13 @@ api.interceptors.response.use(
       }
     }
 
+    // Handle rate limiting — show a toast notification via custom event
+    if (error.response?.status === 429) {
+      const message =
+        error.response?.data?.detail || "Too many requests. Please try again later.";
+      window.dispatchEvent(new CustomEvent("rate-limit", { detail: { message } }));
+    }
+
     return Promise.reject(error);
   }
 );

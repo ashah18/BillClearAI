@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    "axes",
     # Local apps
     "users",
     "bills",
@@ -58,9 +59,11 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "axes.middleware.AxesMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "config.middleware.ContentSecurityPolicyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -124,6 +127,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "bill_upload": "10/hour",
+        "chat": "30/hour",
+        "dispute": "10/hour",
+        "reanalyze": "5/hour",
+        "login": "5/hour",  # duration is overridden to 15 min in LoginRateThrottle.__init__
+        "register": "5/hour",
+        "password_reset": "5/hour",
+    },
+    "EXCEPTION_HANDLER": "config.exceptions.custom_exception_handler",
 }
 
 # JWT settings
@@ -153,8 +166,10 @@ ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 # Django Sites framework (required by allauth)
 SITE_ID = 1
 
-# Authentication backends (ModelBackend for email/password, allauth for OAuth)
+# Authentication backends
+# AxesStandaloneBackend must be first so lockout checks run before other backends
 AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
@@ -188,5 +203,33 @@ SOCIALACCOUNT_PROVIDERS = {
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
 
 # Email configuration
+# In development: set EMAIL_BACKEND=sendgrid_backend.SendgridBackend in .env to send real emails,
+# or leave unset to print emails to the console instead.
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@billclear.ai")
+SENDGRID_API_KEY = env("SENDGRID_API_KEY", default="")
+# Keep False so emails are delivered even when DEBUG=True (SendGrid backend respects this flag)
+SENDGRID_SANDBOX_MODE_IN_DEBUG = env.bool("SENDGRID_SANDBOX_MODE_IN_DEBUG", default=False)
+
+# ── Security headers ──────────────────────────────────────────────────────────
+# Safe in all environments
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_BROWSER_XSS_FILTER = True  # legacy header; harmless on modern browsers
+
+# Production-only HTTPS enforcement (gated on DEBUG so dev is unaffected)
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000          # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# ── django-axes: account lockout after repeated failed login attempts ─────────
+AXES_FAILURE_LIMIT = 5                          # lock after 5 failed attempts
+AXES_COOLOFF_TIME = timedelta(minutes=15)       # unlock after 15 minutes
+AXES_RESET_ON_SUCCESS = True                    # reset failure count on success
+AXES_LOCKOUT_CALLABLE = "config.exceptions.axes_lockout_response"
+# Track failures by IP + username together (harder to bypass than IP alone)
+AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]

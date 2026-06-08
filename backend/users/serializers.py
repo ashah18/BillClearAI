@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.core.exceptions import PermissionDenied
 from rest_framework import serializers
 from .models import User
 
@@ -34,7 +35,13 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(email=data["email"], password=data["password"])
+        try:
+            user = authenticate(email=data["email"], password=data["password"])
+        except PermissionDenied:
+            # django-axes raises PermissionDenied when the account is locked out
+            raise serializers.ValidationError(
+                "Account locked due to too many failed login attempts. Please try again in 15 minutes."
+            )
         if not user:
             raise serializers.ValidationError("Invalid email or password.")
         if not user.is_active:
