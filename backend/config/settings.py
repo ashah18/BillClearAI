@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "axes",
+    "storages",
     # Local apps
     "users",
     "bills",
@@ -54,6 +55,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -109,12 +111,42 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Static files
+# Static files (served by whitenoise in production)
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# Media files
+# Media / file storage
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
+
+# Use S3 for uploaded bills and generated dispute letters when USE_S3=True.
+# Development defaults to local filesystem storage.
+USE_S3 = env.bool("USE_S3", default=False)
+
+if USE_S3:
+    AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="us-east-1")
+    AWS_DEFAULT_ACL = None            # private — inherit bucket settings (no public-read ACL)
+    AWS_QUERYSTRING_AUTH = True       # signed, time-limited URLs for any .url access
+    AWS_S3_FILE_OVERWRITE = False     # never clobber an existing key
+    AWS_S3_SIGNATURE_VERSION = "s3v4"
+    default_backend = "storages.backends.s3.S3Storage"
+else:
+    default_backend = "django.core.files.storage.FileSystemStorage"
+
+# The bills/ and disputes/ S3 key prefixes come from each FileField's upload_to value.
+STORAGES = {
+    "default": {"BACKEND": default_backend},
+    "staticfiles": {
+        "BACKEND": (
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if not DEBUG
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        ),
+    },
+}
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

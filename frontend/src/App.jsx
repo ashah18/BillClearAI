@@ -4,6 +4,7 @@ import { ToastProvider } from "./context/ToastContext.jsx";
 import { useAuth } from "./hooks/useAuth.js";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
+import LandingPage from "./pages/LandingPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import RegisterPage from "./pages/RegisterPage.jsx";
 import OAuthCallbackPage from "./pages/OAuthCallbackPage.jsx";
@@ -17,7 +18,7 @@ import DisputePage from "./pages/DisputePage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 
 /**
- * Redirects unauthenticated users to /login.
+ * Redirects unauthenticated users to the public landing page (/).
  * Shows a loading spinner while the session is being restored.
  */
 function ProtectedRoute({ children }) {
@@ -32,7 +33,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -72,11 +73,11 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Root: redirect based on auth state */}
+      {/* Root: public landing page; logged-in users go straight to the dashboard */}
       <Route
         path="/"
         element={
-          isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+          isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />
         }
       />
 
