@@ -17,6 +17,7 @@ import Navbar from "../components/Navbar.jsx";
 import LineItemCard from "../components/LineItemCard.jsx";
 import { formatCurrency, formatDate } from "../utils/formatters.js";
 import { useToast } from "../context/ToastContext.jsx";
+import { getSubscriptionStatus } from "../api/billing.js";
 
 const DISPUTE_STATUS_STYLES = {
   draft: "bg-gray-100 text-gray-600",
@@ -45,6 +46,8 @@ export default function BillDetailPage() {
   const [isDisputing, setIsDisputing] = useState(false);
   const [error, setError] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
+  const [subscription, setSubscription] = useState(null);
+  const [disputeUpgradeMessage, setDisputeUpgradeMessage] = useState("");
 
   // Dispute selection mode
   const [disputeMode, setDisputeMode] = useState(false);
@@ -81,6 +84,12 @@ export default function BillDetailPage() {
       }
     }
     load();
+
+    getSubscriptionStatus()
+      .then(setSubscription)
+      .catch(() => {
+        // Pro-gated UI simply won't render upgrade-specific affordances on failure.
+      });
   }, [id]);
 
   useEffect(() => {
@@ -108,6 +117,7 @@ export default function BillDetailPage() {
   async function handleSubmitDispute() {
     if (selectedIds.size === 0) return;
     setIsDisputing(true);
+    setDisputeUpgradeMessage("");
     try {
       const dispute = await createDispute(id, [...selectedIds]);
       setDisputes((prev) => [dispute, ...prev]);
@@ -115,8 +125,14 @@ export default function BillDetailPage() {
       setSelectedIds(new Set());
       addToast("Dispute letter generated");
       navigate(`/bills/${id}/disputes/${dispute.id}`);
-    } catch {
-      setError("Failed to generate dispute letter. Please try again.");
+    } catch (err) {
+      if (err.response?.status === 403 && err.response?.data?.upgrade_required) {
+        setDisputeUpgradeMessage(
+          err.response.data.detail || "Dispute letter generation requires a Pro subscription"
+        );
+      } else {
+        setError("Failed to generate dispute letter. Please try again.");
+      }
     } finally {
       setIsDisputing(false);
     }
@@ -178,14 +194,16 @@ export default function BillDetailPage() {
     try {
       const assistantMsg = await sendChatMessage(id, message);
       setChatMessages((prev) => [...prev, assistantMsg]);
-    } catch {
+    } catch (err) {
+      const detail = err.response?.data?.detail;
       setChatMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           role: "assistant",
-          content: "Sorry, I couldn't process your message. Please try again.",
+          content: detail || "Sorry, I couldn't process your message. Please try again.",
           created_at: new Date().toISOString(),
+          upgradeRequired: Boolean(err.response?.data?.upgrade_required),
         },
       ]);
     } finally {
@@ -251,6 +269,15 @@ export default function BillDetailPage() {
         {error && (
           <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200 text-sm">
             {error}
+          </div>
+        )}
+
+        {disputeUpgradeMessage && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800 flex items-center justify-between gap-3">
+            <span>{disputeUpgradeMessage}</span>
+            <Link to="/upgrade" className="font-semibold underline hover:no-underline shrink-0">
+              Upgrade to Pro
+            </Link>
           </div>
         )}
 
@@ -533,7 +560,7 @@ export default function BillDetailPage() {
             {chatMessages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
               >
                 <div
                   className={`max-w-sm px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
@@ -561,6 +588,14 @@ export default function BillDetailPage() {
                     msg.content
                   )}
                 </div>
+                {msg.upgradeRequired && (
+                  <Link
+                    to="/upgrade"
+                    className="mt-1.5 text-xs font-semibold text-blue-600 underline hover:no-underline"
+                  >
+                    Upgrade to Pro
+                  </Link>
+                )}
               </div>
             ))}
             {isChatLoading && (
@@ -594,11 +629,26 @@ export default function BillDetailPage() {
             </button>
           </form>
         </div>
+
+        <p className="text-center text-xs text-gray-400">
+          AI-generated analysis — results are informational only. Verify before taking action.
+        </p>
       </main>
 
       {/* Dispute selection action bar */}
       {disputeMode && (
         <div className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 shadow-lg z-50">
+          {/* Non-blocking upgrade prompt — dispute letters are a Pro feature */}
+          {!subscription?.is_pro && (
+            <div className="bg-blue-50 border-b border-blue-100">
+              <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-center gap-2 text-xs text-blue-800 text-center">
+                <span>Dispute letters are a Pro feature.</span>
+                <Link to="/upgrade" className="font-semibold underline hover:no-underline shrink-0">
+                  Upgrade to Pro
+                </Link>
+              </div>
+            </div>
+          )}
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
             <p className="text-sm text-gray-700">
               <span className="font-semibold">{selectedIds.size}</span> charge{selectedIds.size !== 1 ? "s" : ""} selected

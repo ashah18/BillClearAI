@@ -44,13 +44,13 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
-    "axes",
     "storages",
     # Local apps
     "users",
     "bills",
     "disputes",
     "pricing",
+    "billing",
 ]
 
 MIDDLEWARE = [
@@ -61,7 +61,6 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "axes.middleware.AxesMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -164,7 +163,6 @@ REST_FRAMEWORK = {
         "chat": "30/hour",
         "dispute": "10/hour",
         "reanalyze": "5/hour",
-        "login": "5/hour",  # duration is overridden to 15 min in LoginRateThrottle.__init__
         "register": "5/hour",
         "password_reset": "5/hour",
     },
@@ -195,13 +193,17 @@ CORS_ALLOW_CREDENTIALS = True
 # Anthropic API key
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 
+# Stripe (Phase 4C — freemium subscriptions)
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
+STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+STRIPE_PRO_PRICE_ID = env("STRIPE_PRO_PRICE_ID", default="")
+
 # Django Sites framework (required by allauth)
 SITE_ID = 1
 
 # Authentication backends
-# AxesStandaloneBackend must be first so lockout checks run before other backends
 AUTHENTICATION_BACKENDS = [
-    "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
@@ -235,11 +237,16 @@ SOCIALACCOUNT_PROVIDERS = {
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:5173")
 
 # Email configuration
-# In development: set EMAIL_BACKEND=sendgrid_backend.SendgridBackend in .env to send real emails,
-# or leave unset to print emails to the console instead.
-EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+# Single source of truth: if a SendGrid API key is configured, send real emails through
+# SendGrid; otherwise fall back to Django's console backend (prints emails to the terminal).
+# This guarantees that in development — where no SENDGRID_API_KEY is set — verification and
+# password-reset emails are visible in the runserver console.
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@billclear.ai")
 SENDGRID_API_KEY = env("SENDGRID_API_KEY", default="")
+if SENDGRID_API_KEY:
+    EMAIL_BACKEND = env("EMAIL_BACKEND", default="sendgrid_backend.SendgridBackend")
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 # Keep False so emails are delivered even when DEBUG=True (SendGrid backend respects this flag)
 SENDGRID_SANDBOX_MODE_IN_DEBUG = env.bool("SENDGRID_SANDBOX_MODE_IN_DEBUG", default=False)
 
@@ -257,11 +264,3 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000          # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-
-# ── django-axes: account lockout after repeated failed login attempts ─────────
-AXES_FAILURE_LIMIT = 5                          # lock after 5 failed attempts
-AXES_COOLOFF_TIME = timedelta(minutes=15)       # unlock after 15 minutes
-AXES_RESET_ON_SUCCESS = True                    # reset failure count on success
-AXES_LOCKOUT_CALLABLE = "config.exceptions.axes_lockout_response"
-# Track failures by IP + username together (harder to bypass than IP alone)
-AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]

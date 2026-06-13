@@ -8,6 +8,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from billing.services import (
+    FREE_BILL_UPLOAD_LIMIT,
+    FREE_CHAT_MESSAGE_LIMIT,
+    get_current_month_usage,
+    increment_bill_upload_usage,
+    user_is_pro,
+)
 from disputes.models import Dispute
 from disputes.serializers import DisputeSerializer
 from .models import Bill, ChatMessage, LineItem
@@ -46,6 +53,21 @@ class BillUploadView(APIView):
         if not file:
             return Response({"detail": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Enforce the free-tier monthly bill analysis limit (Pro is unlimited)
+        if not user_is_pro(request.user):
+            usage = get_current_month_usage(request.user)
+            if usage.count >= FREE_BILL_UPLOAD_LIMIT:
+                return Response(
+                    {
+                        "detail": (
+                            f"You've used your {FREE_BILL_UPLOAD_LIMIT} free bill analyses this month. "
+                            "Upgrade to Pro for unlimited."
+                        ),
+                        "upgrade_required": True,
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         # Validate file size
         if file.size > _MAX_UPLOAD_BYTES:
             return Response(
@@ -69,6 +91,9 @@ class BillUploadView(APIView):
             )
 
         bill = Bill.objects.create(user=request.user, original_file=file)
+
+        if not user_is_pro(request.user):
+            increment_bill_upload_usage(request.user)
 
         try:
             parsed_data = services.parse_bill(bill)
@@ -150,6 +175,16 @@ class BillDisputeView(APIView):
     throttle_classes = [DisputeThrottle]
 
     def post(self, request, pk):
+        # Dispute letter generation is a Pro-only feature
+        if not user_is_pro(request.user):
+            return Response(
+                {
+                    "detail": "Dispute letter generation requires a Pro subscription",
+                    "upgrade_required": True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         bill = get_object_or_404(Bill, pk=pk, user=request.user)
 
         line_item_ids = request.data.get("line_item_ids", [])
@@ -199,6 +234,21 @@ class ChatView(APIView):
     def post(self, request, pk):
         """Send a user message and get an AI response."""
         bill = get_object_or_404(Bill, pk=pk, user=request.user)
+
+        # Enforce the free-tier chat message limit per bill (Pro is unlimited)
+        if not user_is_pro(request.user):
+            user_message_count = ChatMessage.objects.filter(bill=bill, role="user").count()
+            if user_message_count >= FREE_CHAT_MESSAGE_LIMIT:
+                return Response(
+                    {
+                        "detail": (
+                            f"You've used your {FREE_CHAT_MESSAGE_LIMIT} free chat messages for this bill. "
+                            "Upgrade to Pro for unlimited chat."
+                        ),
+                        "upgrade_required": True,
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         user_message = request.data.get("message", "").strip()
         if not user_message:

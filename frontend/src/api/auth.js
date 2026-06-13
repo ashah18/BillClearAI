@@ -69,9 +69,12 @@ export async function changePassword(current_password, new_password) {
 }
 
 /**
- * Resend the email verification link to the current user.
+ * Resend the email verification link.
+ * Pass an email to resend without being logged in (e.g. from the login page);
+ * omit it to resend for the currently authenticated user (e.g. dashboard banner).
  */
-export async function resendVerification() {
-  const response = await api.post("/auth/resend-verification/");
+export async function resendVerification(email) {
+  const body = email ? { email } : {};
+  const response = await api.post("/auth/resend-verification/", body);
   return response.data;
 }

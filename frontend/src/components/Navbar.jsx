@@ -13,7 +13,7 @@ export default function Navbar() {
 
   async function handleLogout() {
     await logout();
-    navigate("/login");
+    navigate("/");
   }
 
   return (

@@ -16,3 +16,19 @@ export async function updateProfile(data) {
   const response = await api.put("/user/profile/", data);
   return response.data;
 }
+
+/**
+ * Get the authenticated user's AI disclosure acknowledgment status.
+ */
+export async function getDisclosureStatus() {
+  const response = await api.get("/user/disclosure/");
+  return response.data;
+}
+
+/**
+ * Permanently acknowledge the AI disclosure notice for the current user.
+ */
+export async function acknowledgeDisclosure() {
+  const response = await api.patch("/user/disclosure/");
+  return response.data;
+}

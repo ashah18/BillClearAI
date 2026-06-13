@@ -1,5 +1,7 @@
+import logging
+
 from django.conf import settings
-from django.contrib.auth import logout as auth_logout
+from django.contrib.auth import authenticate, logout as auth_logout
 from django.core import signing
 from django.core.mail import send_mail
 from django.contrib.auth.tokens import default_token_generator
@@ -15,10 +17,11 @@ from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from bills.models import Bill
-from .models import User
-from .throttles import LoginRateThrottle, PasswordResetThrottle, RegisterRateThrottle
+from .models import FailedLoginAttempt, User
+from .throttles import PasswordResetThrottle, RegisterRateThrottle
 from .serializers import (
     ChangePasswordSerializer,
+    DisclosureSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
@@ -26,6 +29,27 @@ from .serializers import (
     RegisterSerializer,
     UserSerializer,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _send_verification_email(user):
+    """Send the email-verification link to a user, logging around the send call."""
+    token = signing.dumps(user.pk, salt="email-verify")
+    verify_url = f"{settings.FRONTEND_URL}/verify-email/{token}/"
+    logger.info("[EMAIL] Sending verification email to %s via backend=%s", user.email, settings.EMAIL_BACKEND)
+    try:
+        send_mail(
+            subject="Verify your BillClear AI email",
+            message=f"Click the link to verify your email address:\n\n{verify_url}\n\nThis link expires in 7 days.",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+        logger.info("[EMAIL] Verification email send completed for %s", user.email)
+    except Exception:
+        # Don't fail the request if email delivery fails — just log it loudly.
+        logger.exception("[EMAIL] Failed to send verification email to %s", user.email)
 
 
 class RegisterView(APIView):
@@ -38,17 +62,9 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        logger.info("[REGISTER] Created user %s (pk=%s)", user.email, user.pk)
 
-        # Send email verification link
-        token = signing.dumps(user.pk, salt="email-verify")
-        verify_url = f"{settings.FRONTEND_URL}/verify-email/{token}/"
-        send_mail(
-            subject="Verify your BillClear AI email",
-            message=f"Click the link to verify your email address:\n\n{verify_url}\n\nThis link expires in 7 days.",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=True,
-        )
+        _send_verification_email(user)
 
         return Response(
             {"detail": "Account created successfully.", "email": user.email},
@@ -63,12 +79,54 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
-    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data["user"]
+        email = serializer.validated_data["email"]
+        password = serializer.validated_data["password"]
+
+        attempt_record = FailedLoginAttempt.objects.filter(email=email).first()
+        if attempt_record and attempt_record.locked:
+            return Response(
+                {
+                    "detail": (
+                        "Your account has been locked due to too many failed login attempts. "
+                        "Please reset your password to regain access."
+                    ),
+                    "account_locked": True,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        user = authenticate(email=email, password=password)
+        if not user:
+            # Don't reveal whether the password was correct — just record the failed attempt.
+            attempt_record = attempt_record or FailedLoginAttempt.objects.create(email=email)
+            attempt_record.attempts += 1
+            if attempt_record.attempts >= 5:
+                attempt_record.locked = True
+            attempt_record.save(update_fields=["attempts", "locked", "updated_at"])
+            return Response({"detail": "Invalid email or password."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if attempt_record and attempt_record.attempts:
+            attempt_record.attempts = 0
+            attempt_record.locked = False
+            attempt_record.save(update_fields=["attempts", "locked", "updated_at"])
+
+        logger.info("[LOGIN] Credentials OK for %s (email_verified=%s)", user.email, user.email_verified)
+
+        # Gate login on email verification (Google OAuth users are auto-verified).
+        if not user.email_verified:
+            logger.info("[LOGIN] Blocked unverified email for %s", user.email)
+            return Response(
+                {
+                    "detail": "Please verify your email before logging in. Check your inbox or click below to resend.",
+                    "email_not_verified": True,
+                    "email": user.email,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         refresh = RefreshToken.for_user(user)
         access_token = str(refresh.access_token)
@@ -167,6 +225,20 @@ class ProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(UserSerializer(request.user).data)
+
+
+class UserDisclosureView(APIView):
+    """Get or acknowledge the authenticated user's AI disclosure notice."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(DisclosureSerializer(request.user).data)
+
+    def patch(self, request):
+        request.user.ai_disclosure_acknowledged = True
+        request.user.save(update_fields=["ai_disclosure_acknowledged"])
+        return Response(DisclosureSerializer(request.user).data)
 
 
 class GoogleJWTView(View):
@@ -272,24 +344,35 @@ class VerifyEmailView(APIView):
 
 
 class ResendVerificationView(APIView):
-    """Resend the email verification link to the authenticated user."""
+    """
+    Resend the email verification link.
 
-    permission_classes = [IsAuthenticated]
+    Works both for an authenticated user (dashboard banner) and for an
+    unauthenticated user who hit the "verify your email" wall on the login page
+    and supplies their email in the request body. Never reveals whether an
+    unauthenticated email exists.
+    """
+
+    permission_classes = [AllowAny]
 
     def post(self, request):
-        user = request.user
-        if user.email_verified:
-            return Response({"detail": "Email already verified."})
-        token = signing.dumps(user.pk, salt="email-verify")
-        verify_url = f"{settings.FRONTEND_URL}/verify-email/{token}/"
-        send_mail(
-            subject="Verify your BillClear AI email",
-            message=f"Click the link to verify your email address:\n\n{verify_url}\n\nThis link expires in 7 days.",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=True,
-        )
-        return Response({"detail": "Verification email sent."})
+        if request.user and request.user.is_authenticated:
+            user = request.user
+            if user.email_verified:
+                return Response({"detail": "Email already verified."})
+            _send_verification_email(user)
+            return Response({"detail": "Verification email sent."})
+
+        # Unauthenticated resend by email address
+        email = (request.data.get("email") or "").strip()
+        if email:
+            try:
+                user = User.objects.get(email=email)
+                if not user.email_verified:
+                    _send_verification_email(user)
+            except User.DoesNotExist:
+                pass  # Don't reveal whether the email exists
+        return Response({"detail": "If that email needs verification, a new link has been sent."})
 
 
 class ChangePasswordView(APIView):
@@ -373,4 +456,8 @@ class PasswordResetConfirmView(APIView):
             )
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
+
+        # A successful reset re-enables an account that was locked out for failed logins.
+        FailedLoginAttempt.objects.filter(email=user.email).update(attempts=0, locked=False)
+
         return Response({"detail": "Password reset successfully. You can now sign in."})

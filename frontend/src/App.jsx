@@ -16,6 +16,7 @@ import UploadPage from "./pages/UploadPage.jsx";
 import BillDetailPage from "./pages/BillDetailPage.jsx";
 import DisputePage from "./pages/DisputePage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
+import UpgradePage from "./pages/UpgradePage.jsx";
 
 /**
  * Redirects unauthenticated users to the public landing page (/).
@@ -108,6 +109,7 @@ function AppRoutes() {
       />
 
       {/* Auth utility routes — no auth guard (user may or may not be logged in) */}
+      <Route path="/upgrade" element={<UpgradePage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
       <Route path="/verify-email/:token" element={<VerifyEmailPage />} />

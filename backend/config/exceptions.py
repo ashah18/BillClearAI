@@ -1,17 +1,5 @@
-from django.http import JsonResponse
 from rest_framework.views import exception_handler
 from rest_framework.exceptions import Throttled
-
-
-def axes_lockout_response(request, credentials=None, *args, **kwargs):
-    """
-    Called by django-axes when an IP/username combination is locked out.
-    Returns a JSON 403 instead of the default HTML lockout page.
-    """
-    return JsonResponse(
-        {"detail": "Account locked due to too many failed login attempts. Please try again in 15 minutes."},
-        status=403,
-    )
 
 
 def custom_exception_handler(exc, context):
@@ -41,8 +29,6 @@ def custom_exception_handler(exc, context):
             message = f"You've reached the limit for dispute letter generation. Please try again in {time_str}."
         elif "Analyze" in view_name:
             message = f"You've reached the limit for bill re-analysis. Please try again in {time_str}."
-        elif "Login" in view_name:
-            message = f"Too many login attempts. Please try again in {time_str}."
         elif "Register" in view_name:
             message = f"Too many registration attempts. Please try again in {time_str}."
         elif "PasswordReset" in view_name:

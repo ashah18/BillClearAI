@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar.jsx";
 import { getProfile, updateProfile } from "../api/user.js";
 import { changePassword } from "../api/auth.js";
+import { createPortalSession, getSubscriptionStatus } from "../api/billing.js";
 import { setAccessToken } from "../api/axios.js";
 import { useToast } from "../context/ToastContext.jsx";
 
@@ -51,6 +53,10 @@ export default function ProfilePage() {
   const [isSavingPw, setIsSavingPw] = useState(false);
   const [pwError, setPwError] = useState("");
 
+  // Billing / subscription state
+  const [subscription, setSubscription] = useState(null);
+  const [isManagingBilling, setIsManagingBilling] = useState(false);
+
   useEffect(() => {
     async function load() {
       try {
@@ -75,6 +81,12 @@ export default function ProfilePage() {
       }
     }
     load();
+
+    getSubscriptionStatus()
+      .then(setSubscription)
+      .catch(() => {
+        // Billing card simply won't render plan-specific details on failure.
+      });
   }, []);
 
   function handleChange(e) {
@@ -122,6 +134,17 @@ export default function ProfilePage() {
       setPwError(msg);
     } finally {
       setIsSavingPw(false);
+    }
+  }
+
+  async function handleManageBilling() {
+    setIsManagingBilling(true);
+    try {
+      const { url } = await createPortalSession();
+      window.location.href = url;
+    } catch (err) {
+      addToast(err.response?.data?.detail || "Could not open the billing portal. Please try again.", "error");
+      setIsManagingBilling(false);
     }
   }
 
@@ -297,6 +320,53 @@ export default function ProfilePage() {
             </button>
           </div>
         </form>
+
+        {/* Billing */}
+        <div className="mt-6 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Billing</h2>
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-sm text-gray-700">
+                Current plan:{" "}
+                <span className="font-semibold text-gray-900">
+                  {subscription?.is_pro ? "Pro" : "Free"}
+                </span>
+              </p>
+              {subscription?.is_pro ? (
+                subscription?.current_period_end && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Renews on{" "}
+                    {new Date(subscription.current_period_end).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </p>
+                )
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  Upgrade to Pro for unlimited bill analyses and dispute letter generation.
+                </p>
+              )}
+            </div>
+            {subscription?.is_pro ? (
+              <button
+                onClick={handleManageBilling}
+                disabled={isManagingBilling}
+                className="shrink-0 text-center border border-gray-300 text-gray-700 text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors"
+              >
+                {isManagingBilling ? "Opening…" : "Manage Subscription"}
+              </button>
+            ) : (
+              <Link
+                to="/upgrade"
+                className="shrink-0 text-center bg-blue-600 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Upgrade to Pro
+              </Link>
+            )}
+          </div>
+        </div>
 
         {/* Change Password — separate form */}
         <form onSubmit={handleChangePassword} className="mt-6">

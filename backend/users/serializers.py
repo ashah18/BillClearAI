@@ -1,5 +1,3 @@
-from django.contrib.auth import authenticate
-from django.core.exceptions import PermissionDenied
 from rest_framework import serializers
 from .models import User
 
@@ -33,21 +31,6 @@ class LoginSerializer(serializers.Serializer):
 
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
-
-    def validate(self, data):
-        try:
-            user = authenticate(email=data["email"], password=data["password"])
-        except PermissionDenied:
-            # django-axes raises PermissionDenied when the account is locked out
-            raise serializers.ValidationError(
-                "Account locked due to too many failed login attempts. Please try again in 15 minutes."
-            )
-        if not user:
-            raise serializers.ValidationError("Invalid email or password.")
-        if not user.is_active:
-            raise serializers.ValidationError("This account has been disabled.")
-        data["user"] = user
-        return data
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -113,3 +96,11 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
     new_password = serializers.CharField(write_only=True, min_length=8)
+
+
+class DisclosureSerializer(serializers.ModelSerializer):
+    """Serializer for the AI disclosure acknowledgment flag."""
+
+    class Meta:
+        model = User
+        fields = ["ai_disclosure_acknowledged"]

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.js";
+import { resendVerification } from "../api/auth.js";
 
 /**
  * Login page with email/password form.
@@ -17,6 +18,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendState, setResendState] = useState("idle"); // idle | sending | sent
+  const [accountLocked, setAccountLocked] = useState(false);
 
   // Message passed via navigation state (e.g. after password reset)
   const successMessage = location.state?.message || "";
@@ -24,12 +28,23 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
+    setResendState("idle");
+    setAccountLocked(false);
     setIsLoading(true);
 
     try {
       await login(email, password);
       navigate("/dashboard");
     } catch (err) {
+      // Email-not-verified is a distinct case: show a resend option, not a generic error.
+      if (err.response?.status === 403 && err.response?.data?.email_not_verified) {
+        setNeedsVerification(true);
+      }
+      // Locked accounts can only be recovered via password reset — point the user there.
+      if (err.response?.status === 403 && err.response?.data?.account_locked) {
+        setAccountLocked(true);
+      }
       const msg =
         err.response?.data?.non_field_errors?.[0] ||
         err.response?.data?.detail ||
@@ -38,6 +53,16 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleResend() {
+    setResendState("sending");
+    try {
+      await resendVerification(email);
+    } catch {
+      // Endpoint never reveals existence; treat as sent regardless.
+    }
+    setResendState("sent");
   }
 
   return (
@@ -55,8 +80,39 @@ export default function LoginPage() {
         )}
 
         {error && (
-          <div className="mb-4 bg-red-50 text-red-700 text-sm px-4 py-3 rounded-lg border border-red-200">
-            {error}
+          <div
+            className={`mb-4 text-sm px-4 py-3 rounded-lg border ${
+              needsVerification
+                ? "bg-amber-50 text-amber-800 border-amber-200"
+                : "bg-red-50 text-red-700 border-red-200"
+            }`}
+          >
+            <p>{error}</p>
+            {accountLocked && (
+              <div className="mt-2">
+                <Link to="/forgot-password" className="font-medium underline hover:no-underline">
+                  Reset your password
+                </Link>
+              </div>
+            )}
+            {needsVerification && (
+              <div className="mt-2">
+                {resendState === "sent" ? (
+                  <span className="text-green-700 font-medium">
+                    Verification email sent — check your inbox.
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resendState === "sending"}
+                    className="font-medium text-amber-900 underline hover:no-underline disabled:opacity-50"
+                  >
+                    {resendState === "sending" ? "Sending…" : "Resend verification email"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

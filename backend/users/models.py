@@ -38,6 +38,7 @@ class User(AbstractUser):
     plan_type = models.CharField(max_length=255, blank=True, default="")
     language_pref = models.CharField(max_length=10, default="en")
     email_verified = models.BooleanField(default=False)
+    ai_disclosure_acknowledged = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -48,3 +49,16 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.email
+
+
+class FailedLoginAttempt(models.Model):
+    """Tracks consecutive failed login attempts per email, for account lockout."""
+
+    email = models.CharField(max_length=255, unique=True)
+    attempts = models.IntegerField(default=0)
+    locked = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.email} (attempts={self.attempts}, locked={self.locked})"
