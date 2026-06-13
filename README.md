@@ -13,7 +13,10 @@ BillClear AI is a consumer-facing web app that helps patients make sense of conf
 - **AI chat** — Ask follow-up questions about your specific bill in a contextual chat.
 - **Dispute letter generation** — Auto-generates professionally formatted Word/PDF dispute letters with your details filled in.
 - **Dispute tracking** — Track each dispute's status (draft → sent → resolved/denied) and record confirmed savings.
-- **Accounts & billing** — Email/password and Google OAuth sign-in, JWT auth, and a freemium model (Free vs. Pro) powered by Stripe.
+- **Accounts & billing** — Email/password and Google OAuth sign-in, JWT auth, password reset, and email verification.
+- **Freemium plans (Stripe)** — A public landing page presents the product, with limits enforced server-side:
+  - **Free** — 3 bill analyses/month, 5 chat messages per bill, fair-price comparison included, but no dispute letter generation.
+  - **Pro ($9.99/mo)** — unlimited analyses and chat, plus dispute letter generation and full dispute tracking.
 
 > AI-generated analyses are informational estimates to help you understand your bill — not legal, medical, or financial advice. Uploaded documents are never used to train AI models.
 
@@ -42,7 +45,7 @@ BillClear AI is a consumer-facing web app that helps patients make sense of conf
 - Stripe SDK for subscriptions, SendGrid for transactional email
 
 ### Architecture
-A two-service monorepo. The React frontend talks to the Django backend exclusively over a JSON REST API. Authentication uses JWT (access token in memory, refresh token in an httpOnly cookie).
+A two-service monorepo. The React frontend talks to the Django backend exclusively over a JSON REST API. Authentication uses JWT (access token in memory, refresh token in an httpOnly cookie). The root route (`/`) is a public landing page; the authenticated app lives at `/dashboard`, with logged-in users redirected there automatically.
 
 ```
 BillClearAI/
