@@ -10,7 +10,9 @@ Files expected in pricing/data/:
 Usage:
     python manage.py import_cms_data
 
-The command clears old rows before importing (idempotent).
+If ProcedureRVU, LocalityGPCI, and ZipToLocality all already have rows for
+year=2026, the command skips the import entirely (idempotent across deploys).
+Otherwise it clears old rows and re-imports all three tables.
 """
 
 import csv
@@ -45,6 +47,9 @@ KEEP_PROC_STATS = {"A", "B", "R", "T", "X"}
 
 # Batch size for bulk_create
 BATCH_SIZE = 500
+
+# Data year to check for / import
+DATA_YEAR = 2026
 
 
 def _is_xlsx(path: str) -> bool:
@@ -85,6 +90,16 @@ class Command(BaseCommand):
     help = "Import CMS fee schedule data (RVUs, GPCIs, ZIP crosswalk) from pricing/data/"
 
     def handle(self, *args, **options):
+        if (
+            ProcedureRVU.objects.filter(year=DATA_YEAR).exists()
+            and LocalityGPCI.objects.filter(year=DATA_YEAR).exists()
+            and ZipToLocality.objects.filter(year=DATA_YEAR).exists()
+        ):
+            self.stdout.write(
+                self.style.SUCCESS(f"CMS data already loaded for {DATA_YEAR}, skipping import")
+            )
+            return
+
         for path, label in [
             (INDICATORS_FILE, "indicators"),
             (LOCALITIES_FILE, "localities"),
