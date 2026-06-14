@@ -258,6 +258,12 @@ SECURE_BROWSER_XSS_FILTER = True  # legacy header; harmless on modern browsers
 
 # Production-only HTTPS enforcement (gated on DEBUG so dev is unaffected)
 if not DEBUG:
+    # Railway (and most PaaS proxies) terminate SSL at the edge and forward to
+    # Django over HTTP, setting X-Forwarded-Proto: https. Trust that header so
+    # Django recognizes the request as secure and SECURE_SSL_REDIRECT doesn't
+    # loop forever (ERR_TOO_MANY_REDIRECTS).
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
