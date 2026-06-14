@@ -273,6 +273,12 @@ def analyze_line_items(bill_instance) -> None:
         logger.warning("No line items found for bill %s", bill_instance.pk)
         return
 
+    file_name = bill_instance.original_file.name if bill_instance.original_file else "unknown"
+    logger.info(
+        "analyze_line_items: starting for bill %s (file=%s, line_items=%d)",
+        bill_instance.pk, file_name, len(line_items),
+    )
+
     items_data = [
         {
             "id": item.pk,
@@ -316,24 +322,36 @@ Error types:
 
 Return null for error_type and empty string for flag_explanation when risk_level is green."""
 
-    response = client.messages.create(
-        model=MODEL,
-        max_tokens=4096,
-        system=system_prompt,
-        messages=[
-            {
-                "role": "user",
-                "content": json.dumps({"line_items": items_data}),
-            }
-        ],
+    logger.info(
+        "analyze_line_items: calling Claude API (model=%s) for bill %s",
+        MODEL, bill_instance.pk,
     )
 
-    raw_text = response.content[0].text.strip()
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("\n", 1)[1]
-        raw_text = raw_text.rsplit("```", 1)[0]
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[
+                {
+                    "role": "user",
+                    "content": json.dumps({"line_items": items_data}),
+                }
+            ],
+        )
 
-    analysis = json.loads(raw_text)
+        raw_text = response.content[0].text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.split("\n", 1)[1]
+            raw_text = raw_text.rsplit("```", 1)[0]
+
+        analysis = json.loads(raw_text)
+    except Exception:
+        logger.exception(
+            "analyze_line_items: Claude API call or response parsing failed for bill %s (file=%s)",
+            bill_instance.pk, file_name,
+        )
+        raise
 
     # Build a lookup map for quick access
     analysis_map = {item["id"]: item for item in analysis.get("line_items", [])}

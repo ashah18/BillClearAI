@@ -281,3 +281,20 @@ if not DEBUG:
 # same site (same registrable domain, different ports), so Lax works. In production
 # they're on different domains, requiring None (paired with Secure=True, set above).
 JWT_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
+
+# ── Logging ────────────────────────────────────────────────────────────────
+# Send app logger output (bills, pricing, disputes, etc.) to stdout/stderr at
+# INFO level so diagnostic and exception logs show up in Railway's deployment logs.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}

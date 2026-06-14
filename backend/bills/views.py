@@ -112,10 +112,8 @@ class BillUploadView(APIView):
                     confidence=float(item_data.get("confidence") or 1.0),
                 )
 
-            services.analyze_line_items(bill)
-
         except Exception as exc:
-            logger.exception("Error processing bill %s: %s", bill.pk, exc)
+            logger.exception("Error parsing bill %s: %s", bill.pk, exc)
             bill.refresh_from_db()
             # parse_bill raises after setting status=failed; any other exception needs the same
             if bill.status != "failed":
@@ -127,6 +125,14 @@ class BillUploadView(APIView):
                 )
                 bill.save(update_fields=["status", "error_message"])
             return Response(BillSerializer(bill).data, status=status.HTTP_201_CREATED)
+
+        try:
+            services.analyze_line_items(bill)
+        except Exception as exc:
+            logger.exception("Error analyzing line items for bill %s: %s", bill.pk, exc)
+            # The bill was uploaded and parsed successfully — line items exist, just
+            # without AI risk analysis. Return the bill as-is (instead of a 500) so
+            # the user can still view it and retry analysis via the re-analyze endpoint.
 
         return Response(BillSerializer(bill).data, status=status.HTTP_201_CREATED)
 
@@ -162,7 +168,7 @@ class BillAnalyzeView(APIView):
             logger.exception("Error re-analyzing bill %s: %s", bill.pk, exc)
             return Response(
                 {"detail": "Analysis failed. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
         return Response(BillSerializer(bill).data)
