@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ToastProvider } from "./context/ToastContext.jsx";
 import { useAuth } from "./hooks/useAuth.js";
@@ -172,6 +173,7 @@ export default function App() {
           </ToastProvider>
         </AuthProvider>
       </ErrorBoundary>
+      <Analytics />
     </BrowserRouter>
   );
 }
