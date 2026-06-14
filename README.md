@@ -2,6 +2,8 @@
 
 **Understand, audit, and dispute your medical bills with AI.**
 
+🌐 **[Live Demo → https://billclearai.app](https://billclearai.app)**
+
 BillClear AI is a consumer-facing web app that helps patients make sense of confusing medical bills and EOBs (Explanation of Benefits). Upload a bill, and the platform parses every line item, translates billing codes into plain English, flags likely errors and overcharges, compares charges against regional fair-market (Medicare) pricing, and generates ready-to-send dispute letters.
 
 ## What It Does
