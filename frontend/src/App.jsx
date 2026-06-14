@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ToastProvider } from "./context/ToastContext.jsx";
 import { useAuth } from "./hooks/useAuth.js";
@@ -174,6 +175,7 @@ export default function App() {
         </AuthProvider>
       </ErrorBoundary>
       <Analytics />
+      <SpeedInsights />
     </BrowserRouter>
   );
 }
