@@ -147,7 +147,7 @@ class LoginView(APIView):
             value=refresh_token,
             httponly=True,
             secure=cookie_secure,
-            samesite="Lax",
+            samesite=settings.JWT_COOKIE_SAMESITE,
             max_age=7 * 24 * 60 * 60,  # 7 days in seconds
         )
 
@@ -185,7 +185,7 @@ class RefreshView(APIView):
             value=str(refresh),
             httponly=True,
             secure=cookie_secure,
-            samesite="Lax",
+            samesite=settings.JWT_COOKIE_SAMESITE,
             max_age=7 * 24 * 60 * 60,
         )
 
@@ -207,7 +207,7 @@ class LogoutView(APIView):
                 pass  # Already invalid — that's fine
 
         response = Response({"detail": "Logged out successfully."}, status=status.HTTP_200_OK)
-        response.delete_cookie("refresh_token")
+        response.delete_cookie("refresh_token", samesite=settings.JWT_COOKIE_SAMESITE)
         return response
 
 
@@ -279,7 +279,7 @@ class GoogleJWTView(View):
             value=refresh_token,
             httponly=True,
             secure=not settings.DEBUG,
-            samesite="Lax",
+            samesite=settings.JWT_COOKIE_SAMESITE,
             max_age=7 * 24 * 60 * 60,
         )
         return response
@@ -400,7 +400,7 @@ class ChangePasswordView(APIView):
             value=str(refresh),
             httponly=True,
             secure=not settings.DEBUG,
-            samesite="Lax",
+            samesite=settings.JWT_COOKIE_SAMESITE,
             max_age=7 * 24 * 60 * 60,
         )
         return response

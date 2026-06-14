@@ -57,16 +57,18 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
   }, []);
 
-  // On mount, attempt to restore session via refresh token cookie
+  // On mount, attempt to restore session via refresh token cookie before
+  // rendering any protected routes (see isLoading gate in App.jsx).
   useEffect(() => {
     async function restoreSession() {
       try {
         const data = await refreshToken();
         setAccessToken(data.access);
-        // Fetch user profile if returned, or set minimal user object
-        dispatch({ type: "SET_USER", payload: { user: data.user || { email: "" } } });
+        const userData = await getProfile();
+        dispatch({ type: "SET_USER", payload: { user: userData } });
       } catch {
-        // No valid session — clear loading state
+        // No valid session — treat as logged out
+        setAccessToken(null);
         dispatch({ type: "SET_LOADING", payload: false });
       }
     }

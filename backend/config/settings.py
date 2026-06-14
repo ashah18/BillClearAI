@@ -267,6 +267,17 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    # The frontend (billclearai.app) and backend (*.up.railway.app) live on different
+    # registrable domains, so cookies are cross-site from the browser's perspective —
+    # SameSite=None (which requires Secure) is needed for them to be sent at all.
+    SESSION_COOKIE_SAMESITE = "None"
+    CSRF_COOKIE_SAMESITE = "None"
     SECURE_HSTS_SECONDS = 31536000          # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+# SameSite policy for the JWT refresh-token cookie (set manually in users/views.py).
+# In development the frontend (localhost:5173) and backend (localhost:8000) share the
+# same site (same registrable domain, different ports), so Lax works. In production
+# they're on different domains, requiring None (paired with Secure=True, set above).
+JWT_COOKIE_SAMESITE = "Lax" if DEBUG else "None"
